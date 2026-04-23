@@ -1,0 +1,25 @@
+{
+  "name": "moto-taxi-runner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.104.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "gsap": "^3.15.0",
+    "howler": "^2.2.4",
+    "tailwindcss": "^4.2.2",
+    "three": "^0.172.0"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.12",
+    "@types/three": "^0.172.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.3"
+  }
+}

@@ -1,0 +1,3 @@
+Sonidos de ejemplo (~17 KB cada uno) para motor y ambiente.
+Para el jam o producción, sustituye engine.mp3 y ambient.mp3 por loops tuyos
+con licencia clara (p. ej. Mixkit https://mixkit.co/license/ o Kenney.nl).
