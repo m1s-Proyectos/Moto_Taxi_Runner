@@ -3,6 +3,9 @@ import { icArrow, icCheck, icCopy, icHash, icHome, icPin, icUser } from './icons
 
 export type GameUiMode = 'practice' | 'multi';
 
+/** Modo de sesión: libre = lógica actual; contrarreloj = límite de tiempo. */
+export type SessionGameMode = 'free' | 'time_attack';
+
 export type GameUiRefs = {
   decorativeBg: HTMLElement;
   hudRoot: HTMLElement;
@@ -14,6 +17,13 @@ export type GameUiRefs = {
   timerDot: HTMLElement;
   speedValue: HTMLElement;
   speedBar: HTMLElement;
+  /** Contenedor (mostrar con turbo activo) + relleno 0–100%. */
+  turboHudWrap: HTMLElement;
+  turboBarFill: HTMLElement;
+  /** Mando táctil (móvil): adelante + giro, enlazado en `input.attachTouchPad`. */
+  btnTouchLeft: HTMLButtonElement;
+  btnTouchForward: HTMLButtonElement;
+  btnTouchRight: HTMLButtonElement;
   pingBadge: HTMLElement;
   menuOverlay: HTMLElement;
   toggleSlider: HTMLElement;
@@ -26,9 +36,13 @@ export type GameUiRefs = {
   roomCodeText: HTMLElement;
   btnCopy: HTMLButtonElement;
   finishOverlay: HTMLElement;
+  finishTitle: HTMLElement;
   finishTime: HTMLElement;
   /** Estado de envío a Supabase tras completar carrera. */
   finishCloud: HTMLElement;
+  /** Contenedor de cuenta atrás (solo Time Attack). */
+  timeAttackHud: HTMLElement;
+  timeAttackBarFill: HTMLElement;
   btnAgain: HTMLButtonElement;
   btnFinishClose: HTMLButtonElement;
   btnBackHome: HTMLButtonElement;
@@ -69,10 +83,15 @@ const bikeBtnOn =
   ' border-amber-500/50 bg-amber-500/[0.12] ring-2 ring-amber-400/30 shadow-[0_0_20px_-4px_rgba(245,158,11,0.45)]';
 const bikeBtnOff = ' border-zinc-800 bg-zinc-950/50 hover:border-amber-500/25 hover:bg-zinc-900/70';
 
+const sessionModeBtnBase =
+  'session-mode-btn flex flex-1 flex-col items-start rounded-lg border px-3 py-2.5 text-left transition-all duration-200 hover:scale-[1.01]';
+const sessionModeBtnOn = bikeBtnOn;
+const sessionModeBtnOff = ' border-zinc-800 bg-zinc-950/50 hover:border-cyan-500/25 hover:bg-zinc-900/60';
+
 export function buildGameUi(
   container: HTMLElement,
   handlers: {
-    onStart: () => void;
+    onStart: (sessionMode: SessionGameMode) => void;
     onModeChange: (mode: GameUiMode) => void;
     onCopyRoom: () => void;
     onFinishAgain: () => void;
@@ -139,6 +158,29 @@ export function buildGameUi(
   timerFrac.dataset.role = 'timer-frac';
   timerFrac.className = 'text-xl font-semibold tabular-nums text-zinc-400';
   timerFrac.textContent = '.00';
+  const timeAttackHud = document.createElement('div');
+  timeAttackHud.dataset.role = 'time-attack-hud';
+  timeAttackHud.className =
+    'mtr-ta-hud pointer-events-none mb-0.5 flex hidden w-full min-w-[min(90vw,280px)] max-w-sm flex-col items-center gap-1.5 rounded-xl border border-amber-500/30 bg-zinc-950/75 px-3 py-2 shadow-lg shadow-amber-500/5 backdrop-blur-md';
+  timeAttackHud.setAttribute('aria-live', 'polite');
+  const timeAttackLabel = document.createElement('div');
+  timeAttackLabel.className =
+    'w-full text-center text-[9px] font-bold uppercase leading-tight tracking-[0.28em] text-amber-400/90';
+  timeAttackLabel.textContent = 'Time left';
+  const timeAttackSub = document.createElement('div');
+  timeAttackSub.className = 'text-center text-[10px] font-medium text-zinc-500';
+  timeAttackSub.textContent = 'Complete Pupy → Papá → Casa before zero';
+  const timeAttackTrack = document.createElement('div');
+  timeAttackTrack.className =
+    'h-2 w-full max-w-[240px] overflow-hidden rounded-full border border-amber-500/25 bg-zinc-900/90';
+  const timeAttackBarFill = document.createElement('div');
+  timeAttackBarFill.dataset.role = 'time-attack-bar';
+  timeAttackBarFill.className =
+    'h-full w-full min-w-0 max-w-full rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-amber-300 transition-[width] duration-200 ease-out';
+  timeAttackBarFill.style.width = '100%';
+  timeAttackTrack.append(timeAttackBarFill);
+  timeAttackHud.append(timeAttackLabel, timeAttackSub, timeAttackTrack);
+
   const timerRow = document.createElement('div');
   timerRow.className = 'flex items-baseline justify-center gap-0';
   timerRow.append(timerMain, timerFrac);
@@ -154,18 +196,20 @@ export function buildGameUi(
   timerMeta.append(timerDot, timerStatus);
   const timerCol = document.createElement('div');
   timerCol.className =
-    'pointer-events-none fixed left-1/2 top-6 z-10 flex -translate-x-1/2 flex-col items-center';
-  timerCol.append(timerRow, timerMeta);
+    'pointer-events-none fixed left-1/2 top-6 z-10 flex w-[min(96vw,28rem)] -translate-x-1/2 flex-col items-center';
+  timerCol.append(timeAttackHud, timerRow, timerMeta);
 
   const mapWrap = document.createElement('div');
-  mapWrap.className = 'pointer-events-none fixed right-6 top-24 z-10 flex flex-col items-end gap-1';
+  mapWrap.className =
+    'pointer-events-none fixed right-[max(0.5rem,env(safe-area-inset-right))] top-16 z-10 flex flex-col items-end gap-0.5 sm:right-3 sm:top-20 sm:gap-1 md:right-6 md:top-24';
   const mapLbl = document.createElement('span');
-  mapLbl.className = 'text-[10px] font-medium uppercase tracking-widest text-zinc-500';
+  mapLbl.className =
+    'text-[8px] font-medium uppercase tracking-widest text-zinc-500 sm:text-[9px] md:text-[10px]';
   mapLbl.textContent = 'Recorrido';
   const mapCanvas = document.createElement('canvas');
   mapCanvas.dataset.role = 'minimap';
   mapCanvas.className =
-    'rounded-xl border border-zinc-800/90 bg-zinc-950/85 shadow-lg shadow-black/40 backdrop-blur-sm';
+    'rounded-lg border border-zinc-800/90 bg-zinc-950/85 shadow-md shadow-black/35 backdrop-blur-sm sm:rounded-xl sm:shadow-lg sm:shadow-black/40';
   mapWrap.append(mapLbl, mapCanvas);
 
   const hudRoot = document.createElement('div');
@@ -174,7 +218,8 @@ export function buildGameUi(
   hudRoot.append(routeCol, timerCol, mapWrap);
 
   const kbd = document.createElement('div');
-  kbd.className = 'pointer-events-none fixed bottom-6 left-6 z-10 flex gap-5 opacity-50';
+  kbd.className =
+    'pointer-events-none fixed bottom-6 left-6 z-10 max-md:hidden flex gap-5 opacity-50';
   kbd.innerHTML = `
     <div class="flex flex-col gap-1.5">
       <div class="flex justify-center">
@@ -192,13 +237,14 @@ export function buildGameUi(
         <kbd class="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] uppercase">R</kbd>
         <span class="text-[10px] font-medium uppercase tracking-wider">Reiniciar</span>
       </div>
-      <span class="max-w-[200px] pt-1 text-[10px] leading-snug text-zinc-600">Móvil: mantén pulsado en la pista y desliza.</span>
+      <span class="max-w-[200px] pt-1 text-[10px] leading-snug text-zinc-600">Móvil: flechas en pantalla; el giro es respecto al sentido de marcha.</span>
     </div>
   `;
   hudRoot.append(kbd);
 
   const speedWrap = document.createElement('div');
-  speedWrap.className = 'pointer-events-none fixed bottom-6 right-8 z-10 flex flex-col items-end';
+  speedWrap.className =
+    'pointer-events-none fixed bottom-[7.5rem] right-3 z-10 flex flex-col items-end md:bottom-6 md:right-8';
   const speedValue = document.createElement('span');
   speedValue.dataset.role = 'speed-val';
   speedValue.className = 'pr-1 text-4xl font-semibold italic tracking-tight tabular-nums text-zinc-50';
@@ -221,13 +267,83 @@ export function buildGameUi(
   speedTrack.className =
     'mt-2 h-1 w-32 overflow-hidden rounded-full border border-zinc-800 bg-zinc-900/80 backdrop-blur-sm';
   speedTrack.append(speedBar);
-  speedWrap.append(speedRow, speedTrack);
+  const turboHudWrap = document.createElement('div');
+  turboHudWrap.dataset.role = 'turbo-hud';
+  turboHudWrap.className = 'mt-2.5 hidden w-32 flex-col items-end gap-0.5';
+  const turboLbl = document.createElement('span');
+  turboLbl.className = 'text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-400/90';
+  turboLbl.textContent = 'Turbo';
+  const turboTrack = document.createElement('div');
+  turboTrack.className =
+    'h-1 w-full overflow-hidden rounded-full border border-cyan-800/50 bg-zinc-950/90';
+  const turboBarFill = document.createElement('div');
+  turboBarFill.dataset.role = 'turbo-bar';
+  turboBarFill.className = 'h-full w-0 rounded-full bg-gradient-to-r from-cyan-700 to-sky-300 shadow-[0_0_8px_rgba(34,211,238,0.35)]';
+  turboTrack.append(turboBarFill);
+  turboHudWrap.append(turboLbl, turboTrack);
+  speedWrap.append(speedRow, speedTrack, turboHudWrap);
   hudRoot.append(speedWrap);
+
+  const arrowLeft =
+    '<svg class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12H3M3 12l6-6M3 12l6 6"/></svg>';
+  const arrowRight =
+    '<svg class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M21 12l-6-6M21 12l-6 6"/></svg>';
+  const arrowUp =
+    '<svg class="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+
+  const btnTouchLeft = document.createElement('button');
+  btnTouchLeft.type = 'button';
+  btnTouchLeft.dataset.role = 'touch-left';
+  btnTouchLeft.setAttribute('aria-label', 'Girar a la izquierda');
+  btnTouchLeft.className =
+    'mtr-touch-btn flex h-[3.25rem] w-[3.6rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-zinc-600/80 bg-zinc-900/95 text-zinc-100 shadow-md shadow-black/30 transition-transform active:scale-[0.97] sm:h-14 sm:w-16';
+  btnTouchLeft.innerHTML = arrowLeft;
+
+  const btnTouchForward = document.createElement('button');
+  btnTouchForward.type = 'button';
+  btnTouchForward.dataset.role = 'touch-forward';
+  btnTouchForward.setAttribute('aria-label', 'Acelerar (adelante)');
+  btnTouchForward.className =
+    'mtr-touch-btn flex h-[3.9rem] w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-amber-500/45 bg-zinc-900/95 text-amber-100 shadow-lg shadow-amber-900/20 transition-transform active:scale-[0.98] sm:h-[4.25rem] sm:w-[4.25rem]';
+  btnTouchForward.innerHTML = arrowUp;
+
+  const btnTouchRight = document.createElement('button');
+  btnTouchRight.type = 'button';
+  btnTouchRight.dataset.role = 'touch-right';
+  btnTouchRight.setAttribute('aria-label', 'Girar a la derecha');
+  btnTouchRight.className = btnTouchLeft.className;
+  btnTouchRight.innerHTML = arrowRight;
+
+  const touchRow = document.createElement('div');
+  touchRow.className =
+    'mx-auto flex w-full max-w-[min(100vw,20rem)] items-end justify-center gap-2 px-2 sm:max-w-sm sm:gap-3 sm:px-3';
+  touchRow.append(btnTouchLeft, btnTouchForward, btnTouchRight);
+
+  const touchDetails = document.createElement('details');
+  touchDetails.className = 'mx-auto mt-0.5 w-full max-w-sm px-3 text-center';
+  const sumTip = document.createElement('summary');
+  sumTip.className =
+    'cursor-pointer list-none py-1 text-[10px] font-medium text-zinc-500 hover:text-zinc-400 sm:text-[11px]';
+  sumTip.textContent = '⚙  Uso recomendado';
+  const tipP = document.createElement('p');
+  tipP.className =
+    'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
+  tipP.textContent =
+    'Avanza con la flecha central. Las laterales giran hacia la izquierda o derecha respecto al frente de la moto. Puedes pulsar a la vez: adelante y un lado para trazar curvas. Freno: no hay botón; suelta el acelerador; en teclado S/flecha abajo.';
+
+  touchDetails.append(sumTip, tipP);
+  const touchPad = document.createElement('div');
+  touchPad.className =
+    'mtr-touch-pad pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 md:hidden';
+  touchPad.setAttribute('role', 'group');
+  touchPad.setAttribute('aria-label', 'Control de conducción');
+  touchPad.append(touchRow, touchDetails);
+  hudRoot.append(touchPad);
 
   const passengerHud = document.createElement('div');
   passengerHud.dataset.role = 'passenger-hud';
   passengerHud.className =
-    'pointer-events-none fixed bottom-28 left-1/2 z-20 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
+    'pointer-events-none fixed bottom-28 left-1/2 z-20 max-md:bottom-44 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
   const passengerInner = document.createElement('div');
   passengerInner.className =
     'flex items-center justify-center gap-3 rounded-2xl border border-amber-500/35 bg-zinc-950/90 px-4 py-3 shadow-lg shadow-black/40 backdrop-blur-md';
@@ -285,6 +401,19 @@ export function buildGameUi(
         </div>
         <div data-panel="practice" class="flex flex-col gap-4">
           <p class="text-sm leading-relaxed text-zinc-400">Carrera local: completa <strong class="font-semibold text-amber-100/95">Pupy → Papá → Casa</strong> lo más rápido posible. Misma pista que en multijugador (cuando esté activo).</p>
+          <div class="flex flex-col gap-2">
+            <label class="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-500/85">Game mode</label>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <button type="button" data-session-mode="free" class="${sessionModeBtnBase}${sessionModeBtnOn}">
+                <span class="text-xs font-semibold text-zinc-100">Free Mode</span>
+                <span class="text-[10px] leading-snug text-zinc-500">Sin límite; mismo comportamiento de siempre.</span>
+              </button>
+              <button type="button" data-session-mode="time_attack" class="${sessionModeBtnBase}${sessionModeBtnOff}">
+                <span class="text-xs font-semibold text-zinc-100">Time Attack</span>
+                <span class="text-[10px] leading-snug text-zinc-500">Contrarreloj: termina la ruta antes de que se agote el tiempo.</span>
+              </button>
+            </div>
+          </div>
           <div class="flex flex-col gap-2">
             <label class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-500/80">Estilo mototaxi (3D)</label>
             <div class="flex gap-2">
@@ -348,7 +477,7 @@ export function buildGameUi(
     'fixed inset-0 z-[60] flex hidden items-center justify-center bg-zinc-950/55 p-4 backdrop-blur-sm';
   finishOverlay.innerHTML = `
     <div class="w-full max-w-[420px] rounded-2xl border border-zinc-800/80 bg-zinc-900/95 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl" role="dialog" aria-modal="true" aria-label="Resultado">
-      <h2 class="text-xl font-semibold tracking-tight text-zinc-50">¡Llegaste!</h2>
+      <h2 data-role="finish-title" class="text-xl font-semibold tracking-tight text-zinc-50">¡Llegaste!</h2>
       <p data-role="finish-time" class="mt-3 font-mono text-lg text-amber-400/95">Tiempo: 0:00.00</p>
       <p data-role="finish-cloud" class="mt-2 hidden min-h-[1.25rem] text-xs text-zinc-500" aria-live="polite"></p>
       <p class="mt-2 text-sm leading-relaxed text-zinc-400">Desempate (si aplica): menor tiempo en el último tramo (casa de mamá), luego el anterior.</p>
@@ -373,11 +502,14 @@ export function buildGameUi(
   const practicePanel = q(menuOverlay, '[data-panel="practice"]');
   const btnBikeClassic = q(practicePanel, '[data-bike="classic"]') as HTMLButtonElement;
   const btnBikeUrban = q(practicePanel, '[data-bike="urban"]') as HTMLButtonElement;
+  const btnModeFree = q(practicePanel, '[data-session-mode="free"]') as HTMLButtonElement;
+  const btnModeTimeAttack = q(practicePanel, '[data-session-mode="time_attack"]') as HTMLButtonElement;
   const multiPanel = q(menuOverlay, '[data-panel="multi"]');
   const btnStart = q(menuOverlay, '[data-role="start"]') as HTMLButtonElement;
   const startLabel = q(menuOverlay, '[data-role="start-label"]');
   const roomCodeText = q(menuOverlay, '[data-role="room-code"]');
   const btnCopy = q(menuOverlay, '[data-role="room-btn"]') as HTMLButtonElement;
+  const finishTitle = q(finishOverlay, '[data-role="finish-title"]');
   const finishTime = q(finishOverlay, '[data-role="finish-time"]');
   const finishCloud = q(finishOverlay, '[data-role="finish-cloud"]');
   const btnAgain = q(finishOverlay, '[data-role="again"]') as HTMLButtonElement;
@@ -423,6 +555,18 @@ export function buildGameUi(
     btnBikeUrban.className = bikeBtnBase + (!onC ? bikeBtnOn : bikeBtnOff);
   };
 
+  let sessionMode: SessionGameMode = 'free';
+  const applySessionMode = (m: SessionGameMode) => {
+    sessionMode = m;
+    const free = m === 'free';
+    btnModeFree.className = sessionModeBtnBase + (free ? sessionModeBtnOn : sessionModeBtnOff);
+    btnModeTimeAttack.className = sessionModeBtnBase + (!free ? sessionModeBtnOn : sessionModeBtnOff);
+  };
+
+  btnModeFree.addEventListener('click', () => applySessionMode('free'));
+  btnModeTimeAttack.addEventListener('click', () => applySessionMode('time_attack'));
+  applySessionMode('free');
+
   btnBikeClassic.addEventListener('click', () => {
     handlers.onBikeStyle('classic');
     applyBikeUi('classic');
@@ -439,7 +583,7 @@ export function buildGameUi(
 
   btnStart.addEventListener('click', () => {
     if (btnStart.disabled) return;
-    handlers.onStart();
+    handlers.onStart(sessionMode);
   });
   btnCopy.addEventListener('click', () => handlers.onCopyRoom());
   btnAgain.addEventListener('click', () => handlers.onFinishAgain());
@@ -456,6 +600,11 @@ export function buildGameUi(
     timerDot,
     speedValue,
     speedBar,
+    turboHudWrap,
+    turboBarFill,
+    btnTouchLeft,
+    btnTouchForward,
+    btnTouchRight,
     pingBadge,
     menuOverlay,
     toggleSlider,
@@ -468,8 +617,11 @@ export function buildGameUi(
     roomCodeText,
     btnCopy,
     finishOverlay,
+    finishTitle,
     finishTime,
     finishCloud,
+    timeAttackHud,
+    timeAttackBarFill,
     btnAgain,
     btnFinishClose,
     btnBackHome,

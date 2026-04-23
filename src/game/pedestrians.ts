@@ -1,8 +1,14 @@
 import * as THREE from 'three';
+import { PEDESTRIAN_CROSSING_Z } from '../track/config';
+import { findTForWorldZ, getRoadCenterline, getRoadYawAtT } from '../track/roadPath';
 
 export type PedestrianInstance = {
   group: THREE.Group;
   z: number;
+  /** Compensación a lo largo de la cebra (Z local o mundo). */
+  localAlong: number;
+  /** Cebra alineada a carretera curva (posición bajo grupo rotado). */
+  curved: boolean;
   phase: number;
   speed: number;
   /** Radio de colisión en XZ */
@@ -10,6 +16,7 @@ export type PedestrianInstance = {
 };
 
 const PED_R = 0.38;
+const _world = new THREE.Vector3();
 
 /** Figura muy simple (cabeza + torso + piernas) — legible a la cámara del juego. */
 function createPedestrianFigure(shirtHex: number, pantsHex: number): THREE.Group {
@@ -50,12 +57,44 @@ export function createCrossingPedestrians(zCenter: number, count: number): Pedes
     group.position.set(0, 0, z);
     const phase = (i / count) * Math.PI * 2 + i * 0.7;
     const speed = 0.55 + (i % 3) * 0.12;
-    out.push({ group, z, phase, speed, radius: PED_R });
+    out.push({ group, z, localAlong: z, curved: false, phase, speed, radius: PED_R });
   }
   return out;
 }
 
-/** Oscila en X atravesando la calzada; `amp` mitad del ancho útil (~ carril). */
+/** Cebra siguiendo la mediana; peatones bajo un grupo con yaw de carretera. */
+export function createCrossingPedestriansOnRoad(scene: THREE.Scene, count: number, zTarget = PEDESTRIAN_CROSSING_Z): PedestrianInstance[] {
+  const c = getRoadCenterline();
+  const t = findTForWorldZ(zTarget);
+  const p = c.getPointAt(t);
+  const yaw = getRoadYawAtT(t);
+  const root = new THREE.Group();
+  root.position.set(p.x, 0, p.z);
+  root.rotation.y = yaw;
+  scene.add(root);
+  const out: PedestrianInstance[] = [];
+  for (let i = 0; i < count; i++) {
+    const shirt = SHIRTS[i % SHIRTS.length]!;
+    const pants = PANTS[i % PANTS.length]!;
+    const group = createPedestrianFigure(shirt, pants);
+    const localAlong = (i - (count - 1) * 0.5) * 0.75;
+    group.position.set(0, 0, localAlong);
+    root.add(group);
+    const phase = (i / count) * Math.PI * 2 + i * 0.7;
+    const speed = 0.55 + (i % 3) * 0.12;
+    out.push({ group, z: 0, localAlong, curved: true, phase, speed, radius: PED_R });
+  }
+  return out;
+}
+
+/** Posición en mundo del peatón (para colisión) cuando hay grupo de cebra. */
+export function getPedestrianWorldXZ(p: PedestrianInstance, out: { x: number; z: number }): void {
+  p.group.getWorldPosition(_world);
+  out.x = _world.x;
+  out.z = _world.z;
+}
+
+/** Oscila al atravesar calzada; `amp` mitad de ancho útil. */
 export function updatePedestrianPositions(
   pedestrians: readonly PedestrianInstance[],
   timeSec: number,
@@ -64,7 +103,7 @@ export function updatePedestrianPositions(
   for (const p of pedestrians) {
     const t = timeSec * p.speed + p.phase;
     p.group.position.x = Math.sin(t) * amp;
-    p.group.position.z = p.z;
+    p.group.position.z = p.curved ? p.localAlong : p.z;
     p.group.rotation.y = Math.cos(t) > 0 ? Math.PI / 2 : -Math.PI / 2;
   }
 }
@@ -94,4 +133,58 @@ export function addZebraCrossing(scene: THREE.Scene, zCenter: number): void {
   const padR = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.06, 5), padMat);
   padR.position.set(12.5, 0.04, zCenter);
   scene.add(padR);
+}
+
+/**
+ * Pasos de cebra alineados a la tangente y aceras desplazadas con la curva.
+ * `zTarget` = misma lógica que en config (PEDESTRIAN_CROSSING_Z).
+ */
+export function addZebraCrossingOnRoad(scene: THREE.Scene, zTarget: number = PEDESTRIAN_CROSSING_Z): void {
+  const c = getRoadCenterline();
+  const t = findTForWorldZ(zTarget);
+  const center = c.getPointAt(t);
+  const tvec = new THREE.Vector3();
+  c.getTangentAt(t, tvec);
+  tvec.y = 0;
+  if (tvec.lengthSq() < 1e-6) {
+    return;
+  }
+  tvec.normalize();
+  const rightX = -tvec.z;
+  const rightZ = tvec.x;
+  const yaw = getRoadYawAtT(t);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xf8fafc,
+    roughness: 0.88,
+    metalness: 0.02,
+  });
+  const stripeW = 0.55;
+  const stripeL = 16;
+  for (let i = 0; i < 7; i++) {
+    const off = -4.5 + i * 1.5;
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(stripeW, stripeL), mat);
+    stripe.rotation.x = -Math.PI / 2;
+    stripe.rotation.y = yaw;
+    stripe.position.set(
+      center.x + rightX * off,
+      0.025,
+      center.z + rightZ * off,
+    );
+    scene.add(stripe);
+  }
+  const padMat = new THREE.MeshStandardMaterial({
+    color: 0x5c5c66,
+    roughness: 0.9,
+    metalness: 0.04,
+  });
+  for (const s of [-1, 1] as const) {
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.06, 5), padMat);
+    pad.rotation.y = yaw;
+    pad.position.set(
+      center.x + rightX * s * 12.5,
+      0.04,
+      center.z + rightZ * s * 12.5,
+    );
+    scene.add(pad);
+  }
 }

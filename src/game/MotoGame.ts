@@ -3,14 +3,34 @@ import {
   CHECKPOINTS,
   CONTACT_TIME_PENALTY_MS,
   OBSTACLES,
-  PEDESTRIAN_CROSSING_Z,
   PEDESTRIAN_ZONE_Z_MAX,
   PEDESTRIAN_ZONE_Z_MIN,
   PHYS,
   PLAYER_RADIUS,
   SPAWN,
+  TURBO,
   WORLD_FLOOR_Y,
+  TIME_ATTACK_LIMIT_MS,
 } from '../track/config';
+import {
+  isObstacleMovingPositiveZ,
+  obstacleAabbAtTime,
+  obstacleFootprintForMinimap,
+} from '../track/obstacleMotion';
+import {
+  addRoadCenterDashes,
+  buildRoadRibbonGeometry,
+  findTForWorldZ,
+  getLateralDistanceToRoadMeters,
+  getOffroadSeverity,
+  getRoadCenterline,
+  ROAD_HALF_WIDTH,
+} from '../track/roadPath';
+import {
+  buildVibeJamBackToRefUrl,
+  buildVibeJamExitUrl,
+  getVibeJamBackRefFromQuery,
+} from '../lib/vibeJamPortal';
 import {
   mountBikeStyle,
   readStoredBikeStyle,
@@ -27,19 +47,28 @@ import {
   playFinishFanfare,
   unlockAudio,
 } from './feedback';
-import { buildGameUi, type GameUiRefs, updateRouteSegment } from '../ui/buildGameUi';
+import {
+  buildGameUi,
+  type GameUiRefs,
+  type SessionGameMode,
+  updateRouteSegment,
+} from '../ui/buildGameUi';
 import { drawMinimap } from '../ui/minimap';
 import { circleIntersectsObstacle, resolveCircleObstacle } from './collision';
-import { attachKeyboard, attachPointerDriver, pollInput } from './input';
+import { attachKeyboard, attachTouchPad, pollInput } from './input';
 import {
-  addZebraCrossing,
-  createCrossingPedestrians,
+  addZebraCrossingOnRoad,
+  createCrossingPedestriansOnRoad,
+  getPedestrianWorldXZ,
   updatePedestrianPositions,
   type PedestrianInstance,
 } from './pedestrians';
 import { createParkedCar } from './parkedCar';
 import { addCityscape } from './worldDecor';
 import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
+import { DriftTrail } from './driftTrail';
+import { createDefaultTurboPickups, updateTurboPickupFloat, type TurboPickupInstance } from './turboPickups';
+import { addTrafficLightsToScene, isInActiveGreenCorridor } from './trafficLights';
 
 type RacePhase = 'ready' | 'boarding' | 'exchange' | 'racing' | 'done';
 
@@ -62,9 +91,22 @@ function fmtTimeParts(ms: number): { main: string; frac: string } {
 
 const ROUTE_LABELS: ['Pupy', 'Papá', 'Casa'] = ['Pupy', 'Papá', 'Casa'];
 
+const TIMER_MAIN_BASE =
+  'text-3xl font-semibold tracking-tight tabular-nums text-zinc-50 drop-shadow-[0_0_12px_rgba(255,255,255,0.1)]';
+const TIMER_MAIN_TIME_ATTACK =
+  'text-4xl font-bold tracking-tight tabular-nums text-amber-50 drop-shadow-[0_0_20px_rgba(251,191,36,0.35)] sm:text-5xl';
+const TIMER_FRAC_BASE = 'text-xl font-semibold tabular-nums text-zinc-400';
+const TIMER_FRAC_TIME_ATTACK = 'text-2xl font-bold tabular-nums text-amber-200/90 sm:text-3xl';
+const TA_BAR_OK =
+  'h-full w-full min-w-0 max-w-full rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-amber-300 transition-[width] duration-200 ease-out';
+const TA_BAR_LOW =
+  'h-full w-full min-w-0 max-w-full rounded-full bg-gradient-to-r from-red-700 via-red-500 to-amber-400 transition-[width] duration-200 ease-out';
+
 export type MotoGameOptions = {
   /** Cierra el juego y deja que la app vuelva al splash (p. ej. botón «Volver a inicio»). */
   onBackToHome?: () => void;
+  /** Vibe Jam: `?portal=true` abre al instante (sin menú) para continuidad webring. */
+  vibeJamAutoStart?: boolean;
 };
 
 export class MotoGame {
@@ -81,7 +123,7 @@ export class MotoGame {
   private readonly ui: GameUiRefs;
 
   private detachKeyboard: (() => void) | null = null;
-  private detachPointer: (() => void) | null = null;
+  private detachTouchPad: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private raf = 0;
 
@@ -110,8 +152,31 @@ export class MotoGame {
 
   private readonly loopAudio = new GameLoopAudio();
   private bikeStyle: BikeStyle;
+  private sessionGameMode: SessionGameMode = 'free';
+  private timeAttackFailed = false;
+  private readonly obstacleCarGroups: THREE.Group[] = [];
+  private readonly minimapObstacleFp: { cx: number; cz: number; hw: number; hd: number }[] = OBSTACLES.map(
+    () => ({ cx: 0, cz: 0, hw: 0, hd: 0 }),
+  );
+  private readonly pedWorldScratch = { x: 0, z: 0 };
+  private readonly driftTrail: DriftTrail;
+  private bikeDriftLastYaw: number;
+  private turboPickups: TurboPickupInstance[] = [];
+  private turboBoostUntilMs: number | null = null;
+
+  private readonly vibeJamAutoStart: boolean;
+  private vibeRingExit: THREE.Group | null = null;
+  private vibeRingBack: THREE.Group | null = null;
+  private vibeExitXZ = { x: 0, z: 0 };
+  private vibeBackXZ: { x: number; z: number } | null = null;
+  private vibePortalExitDone = false;
+  private vibePortalBackDone = false;
+  private readonly vibeVjP = new THREE.Vector3();
+  private readonly vibeVjTan = new THREE.Vector3();
+  private readonly vibeVjRight = new THREE.Vector3();
 
   constructor(container: HTMLElement, options?: MotoGameOptions) {
+    this.vibeJamAutoStart = options?.vibeJamAutoStart === true;
     this.container = container;
 
     const initialBike = readStoredBikeStyle();
@@ -129,7 +194,10 @@ export class MotoGame {
     container.appendChild(this.renderer.domElement);
 
     this.ui = buildGameUi(container, {
-      onStart: () => this.beginSession(),
+      onStart: (mode) => {
+        this.sessionGameMode = mode;
+        this.beginSession();
+      },
       onModeChange: () => {},
       onCopyRoom: () => this.copyRoomPlaceholder(),
       onFinishAgain: () => {
@@ -145,7 +213,7 @@ export class MotoGame {
     });
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x121018, 62, 218);
+    this.scene.fog = new THREE.Fog(0x121018, 78, 340);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
@@ -159,6 +227,8 @@ export class MotoGame {
     this.scene.add(sun);
 
     this.buildWorld();
+    this.driftTrail = new DriftTrail(this.scene, { maxPoints: 48 });
+    this.bikeDriftLastYaw = SPAWN.rotationY;
     this.scene.add(this.bike);
     mountBikeStyle(this.bike, initialBike);
 
@@ -173,9 +243,13 @@ export class MotoGame {
 
   start(): void {
     this.detachKeyboard?.();
-    this.detachPointer?.();
+    this.detachTouchPad?.();
     this.detachKeyboard = attachKeyboard();
-    this.detachPointer = attachPointerDriver(this.renderer.domElement);
+    this.detachTouchPad = attachTouchPad({
+      forward: this.ui.btnTouchForward,
+      left: this.ui.btnTouchLeft,
+      right: this.ui.btnTouchRight,
+    });
     this.renderer.domElement.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
@@ -190,6 +264,11 @@ export class MotoGame {
     };
 
     this.clock.getDelta();
+    if (this.vibeJamAutoStart) {
+      queueMicrotask(() => {
+        this.beginSession();
+      });
+    }
     this.raf = window.requestAnimationFrame(() => this.tick());
   }
 
@@ -198,10 +277,11 @@ export class MotoGame {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     window.removeEventListener('resize', this.onResize);
-    this.detachPointer?.();
-    this.detachPointer = null;
+    this.detachTouchPad?.();
+    this.detachTouchPad = null;
     this.detachKeyboard?.();
     this.loopAudio.dispose();
+    this.driftTrail.dispose();
     this.renderer.dispose();
     this.container.replaceChildren();
   }
@@ -251,48 +331,42 @@ export class MotoGame {
   };
 
   private buildWorld(): void {
-    const roadCenterZ = -96;
-    const roadLen = 300;
-
+    /** Abarca salida z≈+4 y final de ruta z≈-320 con margen. */
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(360, 360, 1, 1),
+      new THREE.PlaneGeometry(720, 720, 1, 1),
       new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 1, metalness: 0 }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = WORLD_FLOOR_Y;
     this.scene.add(ground);
 
-    const road = new THREE.Mesh(
-      new THREE.PlaneGeometry(18, roadLen, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x2f3548, roughness: 0.96, metalness: 0.02 }),
-    );
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0.01, roadCenterZ);
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x2f3548, roughness: 0.96, metalness: 0.02 });
+    const roadGeo = buildRoadRibbonGeometry(ROAD_HALF_WIDTH, 0.01, 256);
+    const road = new THREE.Mesh(roadGeo, roadMat);
+    road.receiveShadow = true;
     this.scene.add(road);
-
-    for (let z = 48; z > roadCenterZ - roadLen * 0.52; z -= 11) {
-      const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.35, 3.2),
-        new THREE.MeshStandardMaterial({ color: 0xd7e2ff, roughness: 1, metalness: 0 }),
-      );
-      stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(0, 0.02, z);
-      this.scene.add(stripe);
-    }
+    addRoadCenterDashes(this.scene, 0.022, { tStep: 0.03, dashLen: 1.4, dashW: 0.36 });
 
     addCityscape(this.scene);
 
-    addZebraCrossing(this.scene, PEDESTRIAN_CROSSING_Z);
-    const peds = createCrossingPedestrians(PEDESTRIAN_CROSSING_Z, 7);
+    addZebraCrossingOnRoad(this.scene);
+    const peds = createCrossingPedestriansOnRoad(this.scene, 7);
     this.pedestrians.length = 0;
     for (const p of peds) {
       this.pedestrians.push(p);
       this.scene.add(p.group);
     }
 
+    this.obstacleCarGroups.length = 0;
     OBSTACLES.forEach((o, i) => {
-      this.scene.add(createParkedCar(o, i));
+      const g = createParkedCar(o, i);
+      this.scene.add(g);
+      this.obstacleCarGroups.push(g);
     });
+    const tSpawn = performance.now() * 0.001;
+    for (let i = 0; i < this.obstacleCarGroups.length; i++) {
+      this.syncObstacleTransform(i, tSpawn);
+    }
 
     for (const cp of CHECKPOINTS) {
       const g = new THREE.Group();
@@ -319,6 +393,139 @@ export class MotoGame {
       this.scene.add(g);
       this.checkpointMeshes.push(g);
     }
+
+    this.turboPickups = createDefaultTurboPickups(this.scene);
+    addTrafficLightsToScene(this.scene);
+    this.addVibeJamPortals();
+  }
+
+  /** Anillos webring Vibe Jam 2026: salida a hub, vuelta a `ref` si vino de otro juego. */
+  private addVibeJamPortals(): void {
+    const curve = getRoadCenterline();
+    const tExit = findTForWorldZ(-40);
+    curve.getPointAt(tExit, this.vibeVjP);
+    curve.getTangentAt(tExit, this.vibeVjTan);
+    this.vibeVjTan.y = 0;
+    if (this.vibeVjTan.lengthSq() < 1e-8) {
+      this.vibeVjRight.set(1, 0, 0);
+    } else {
+      this.vibeVjTan.normalize();
+      this.vibeVjRight.set(-this.vibeVjTan.z, 0, this.vibeVjTan.x);
+    }
+    const offE = 6.5;
+    const exX = this.vibeVjP.x + this.vibeVjRight.x * offE;
+    const exZ = this.vibeVjP.z + this.vibeVjRight.z * offE;
+    this.vibeRingExit = this.createVibeJamRingGroup(0x22d3ee, 'Portal Vibe Jam');
+    this.vibeRingExit.position.set(exX, 0, exZ);
+    this.scene.add(this.vibeRingExit);
+    this.vibeExitXZ = { x: exX, z: exZ };
+
+    const backRef = getVibeJamBackRefFromQuery();
+    if (backRef) {
+      const tBack = findTForWorldZ(2.2);
+      curve.getPointAt(tBack, this.vibeVjP);
+      curve.getTangentAt(tBack, this.vibeVjTan);
+      this.vibeVjTan.y = 0;
+      this.vibeVjTan.normalize();
+      this.vibeVjRight.set(-this.vibeVjTan.z, 0, this.vibeVjTan.x);
+      const offB = 6.2;
+      const bX = this.vibeVjP.x - this.vibeVjRight.x * offB;
+      const bZ = this.vibeVjP.z - this.vibeVjRight.z * offB;
+      this.vibeRingBack = this.createVibeJamRingGroup(0xec4899, 'Volver a juego previo');
+      this.vibeRingBack.position.set(bX, 0, bZ);
+      this.scene.add(this.vibeRingBack);
+      this.vibeBackXZ = { x: bX, z: bZ };
+    } else {
+      this.vibeBackXZ = null;
+    }
+  }
+
+  private createVibeJamRingGroup(hex: number, label: string): THREE.Group {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+      color: hex,
+      emissive: hex,
+      emissiveIntensity: 0.48,
+      metalness: 0.2,
+      roughness: 0.38,
+    });
+    const tor = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.11, 10, 40), mat);
+    tor.rotation.x = Math.PI / 2;
+    tor.position.y = 0.72;
+    g.add(tor);
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 88;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = 'rgba(6,4,16,0.7)';
+    ctx.fillRect(0, 0, 512, 88);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 26px system-ui,Segoe UI,sans-serif';
+    ctx.fillText(label, 20, 55);
+    const tex = new THREE.CanvasTexture(c);
+    const spr = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+    );
+    spr.position.y = 1.7;
+    spr.scale.set(4.2, 0.72, 1);
+    g.add(spr);
+    return g;
+  }
+
+  private checkVibeJamPortals(bx: number, bz: number): void {
+    const r = 3.1;
+    const r2 = r * r;
+    if (!this.vibePortalExitDone) {
+      const dx = bx - this.vibeExitXZ.x;
+      const dz = bz - this.vibeExitXZ.z;
+      if (dx * dx + dz * dz < r2) {
+        this.vibePortalExitDone = true;
+        window.location.assign(buildVibeJamExitUrl(this.speed));
+      }
+    }
+    if (this.vibeBackXZ && !this.vibePortalBackDone) {
+      const dx = bx - this.vibeBackXZ.x;
+      const dz = bz - this.vibeBackXZ.z;
+      if (dx * dx + dz * dz < r2) {
+        const url = buildVibeJamBackToRefUrl();
+        if (url) {
+          this.vibePortalBackDone = true;
+          window.location.assign(url);
+        }
+      }
+    }
+  }
+
+  /** Muestra turbos y permite recogerlos solo tras la parada correspondiente (p. ej. Pupy hecha → `nextCheckpointIndex >= 1`). */
+  private syncTurboPickupVisibility(): void {
+    for (const tp of this.turboPickups) {
+      if (!tp.active) {
+        tp.group.visible = false;
+        continue;
+      }
+      tp.group.visible = this.nextCheckpointIndex >= tp.minNextCheckpointIndex;
+    }
+  }
+
+  private getEffectiveMaxSpeed(): number {
+    if (this.turboBoostUntilMs === null) {
+      return PHYS.maxSpeed;
+    }
+    if (performance.now() >= this.turboBoostUntilMs) {
+      return PHYS.maxSpeed;
+    }
+    return PHYS.maxSpeed * TURBO.maxSpeedMult;
+  }
+
+  private syncObstacleTransform(index: number, tSec: number): void {
+    const o = OBSTACLES[index]!;
+    const g = this.obstacleCarGroups[index]!;
+    const aabb = obstacleAabbAtTime(o, tSec);
+    const cx = (aabb.min.x + aabb.max.x) * 0.5;
+    const cz = (aabb.min.z + aabb.max.z) * 0.5;
+    g.position.set(cx, o.min.y, cz);
+    const forwardPlusZ = o.motion ? isObstacleMovingPositiveZ(o, tSec) : true;
+    g.rotation.set(0, forwardPlusZ ? 0 : Math.PI, 0);
   }
 
   private resetRun(): void {
@@ -335,15 +542,26 @@ export class MotoGame {
     this.lastBumpMs = 0;
     this.wasTouchingVehicle = false;
     this.wasTouchingPedInZone = false;
+    this.vibePortalExitDone = false;
+    this.vibePortalBackDone = false;
 
     this.clearSparks();
+    this.driftTrail.clear();
+    for (const tp of this.turboPickups) {
+      tp.active = true;
+    }
+    this.syncTurboPickupVisibility();
+    this.turboBoostUntilMs = null;
 
     this.bike.position.copy(SPAWN.position);
     this.bike.rotation.set(0, SPAWN.rotationY, 0);
+    this.bikeDriftLastYaw = SPAWN.rotationY;
 
     this.ui.finishOverlay.classList.add('hidden');
+    this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
+    this.timeAttackFailed = false;
     this.hidePassengerHud();
 
     this.syncHud();
@@ -402,6 +620,7 @@ export class MotoGame {
 
   private completeFinalStop(): void {
     if (this.nextCheckpointIndex >= CHECKPOINTS.length) return;
+    this.timeAttackFailed = false;
     this.spawnSparkBurst(this.bike.position.clone(), true);
     playFinishFanfare();
     hapticFinish();
@@ -413,6 +632,7 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.hidePassengerHud();
     const total = this.finishedRaceMs ?? 0;
+    this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishTime.textContent = `Tiempo: ${fmtTime(total)}`;
     this.ui.finishOverlay.classList.remove('hidden');
     this.syncHud();
@@ -447,6 +667,25 @@ export class MotoGame {
       this.ui.finishCloud.classList.add('hidden');
       this.ui.finishCloud.textContent = '';
     }
+  }
+
+  private failTimeAttack(): void {
+    if (this.timeAttackFailed || this.sessionGameMode !== 'time_attack') return;
+    this.timeAttackFailed = true;
+    this.speed = 0;
+    this.phase = 'done';
+    this.finishedRaceMs = this.raceElapsedMs;
+    this.hidePassengerHud();
+    this.exchangeMode = null;
+    this.exchangeUntilMs = null;
+    this.ui.finishTitle.textContent = "Time's up!";
+    this.ui.finishTime.textContent = `Límite ${fmtTime(TIME_ATTACK_LIMIT_MS)} · Tiempo: ${fmtTime(this.raceElapsedMs)}`;
+    this.ui.finishCloud.classList.add('hidden');
+    this.ui.finishCloud.textContent = '';
+    this.ui.finishOverlay.classList.remove('hidden');
+    playBump();
+    hapticBump();
+    this.syncHud();
   }
 
   private clearSparks(): void {
@@ -516,14 +755,62 @@ export class MotoGame {
     }
   }
 
+  /** Tiempo restante de Time Attack; en modo libre no se usa en HUD. */
+  private timeAttackRemainingMs(): number {
+    return Math.max(0, TIME_ATTACK_LIMIT_MS - this.raceElapsedMs);
+  }
+
+  /**
+   * Panel de Time Attack: cuenta atrás legible, bara de tiempo restante y estilos reforzados.
+   * En modo libre o el reloj vuelve a tipografía normal.
+   */
+  private updateTimeAttackHudVisuals(): void {
+    const hud = this.ui.timeAttackHud;
+    const bar = this.ui.timeAttackBarFill;
+    const showTaHud =
+      this.sessionStarted &&
+      this.sessionGameMode === 'time_attack' &&
+      this.phase !== 'done';
+
+    if (!showTaHud) {
+      hud.classList.add('hidden');
+      this.ui.timerMain.className = TIMER_MAIN_BASE;
+      this.ui.timerFrac.className = TIMER_FRAC_BASE;
+      return;
+    }
+
+    hud.classList.remove('hidden');
+    const rem = this.timeAttackRemainingMs();
+    const pct = Math.max(0, Math.min(100, (rem / TIME_ATTACK_LIMIT_MS) * 100));
+    bar.style.width = `${pct}%`;
+    this.ui.timerMain.className = TIMER_MAIN_TIME_ATTACK;
+    this.ui.timerFrac.className = TIMER_FRAC_TIME_ATTACK;
+    if (rem < 30_000) {
+      hud.classList.add('ring-2', 'ring-red-500/50', 'border-red-500/40');
+      bar.className = TA_BAR_LOW;
+    } else {
+      hud.classList.remove('ring-2', 'ring-red-500/50', 'border-red-500/40');
+      bar.className = TA_BAR_OK;
+    }
+  }
+
   private syncHud(): void {
+    const endHud = () => this.updateTimeAttackHudVisuals();
     this.syncRoutePill();
 
-    const maxSpeed = PHYS.maxSpeed;
+    const maxSpeed = this.getEffectiveMaxSpeed();
     const kph = Math.round(this.speed * 18);
     this.ui.speedValue.textContent = `${kph}`;
     const pct = Math.min(100, Math.max(0, Math.round((Math.abs(this.speed) / maxSpeed) * 100)));
     this.ui.speedBar.style.width = `${pct}%`;
+    if (this.turboBoostUntilMs !== null && performance.now() < this.turboBoostUntilMs) {
+      this.ui.turboHudWrap.classList.remove('hidden');
+      const rem = (this.turboBoostUntilMs - performance.now()) / TURBO.durationMs;
+      this.ui.turboBarFill.style.width = `${Math.max(0, Math.min(100, rem * 100))}%`;
+    } else {
+      this.ui.turboHudWrap.classList.add('hidden');
+      this.ui.turboBarFill.style.width = '0%';
+    }
 
     if (!this.sessionStarted) {
       const z = fmtTimeParts(0);
@@ -531,42 +818,87 @@ export class MotoGame {
       this.ui.timerFrac.textContent = z.frac;
       this.ui.timerStatus.textContent = 'Menú';
       this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-zinc-500';
+      endHud();
       return;
     }
 
     if (this.phase === 'ready') {
-      const z = fmtTimeParts(0);
-      this.ui.timerMain.textContent = z.main;
-      this.ui.timerFrac.textContent = z.frac;
-      this.ui.timerStatus.textContent = 'Listo';
-      this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]';
+      if (this.sessionGameMode === 'time_attack') {
+        const z = fmtTimeParts(this.timeAttackRemainingMs());
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Time Attack';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]';
+      } else {
+        const z = fmtTimeParts(0);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Listo';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]';
+      }
+      endHud();
       return;
     }
 
     if (this.phase === 'boarding') {
-      const z = fmtTimeParts(0);
-      this.ui.timerMain.textContent = z.main;
-      this.ui.timerFrac.textContent = z.frac;
-      this.ui.timerStatus.textContent = 'Subiendo';
-      this.ui.timerDot.className = 'h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400';
+      if (this.sessionGameMode === 'time_attack') {
+        const z = fmtTimeParts(this.timeAttackRemainingMs());
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Time Attack';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400';
+      } else {
+        const z = fmtTimeParts(0);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Subiendo';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400';
+      }
+      endHud();
       return;
     }
 
     if (this.phase === 'exchange') {
-      const z = fmtTimeParts(this.raceElapsedMs);
-      this.ui.timerMain.textContent = z.main;
-      this.ui.timerFrac.textContent = z.frac;
-      this.ui.timerStatus.textContent = 'Parada';
-      this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-amber-500';
+      if (this.sessionGameMode === 'time_attack') {
+        const rem = this.timeAttackRemainingMs();
+        const z = fmtTimeParts(rem);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Parada';
+        this.ui.timerDot.className =
+          rem < 30_000
+            ? 'h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_6px_rgba(248,113,113,0.4)]'
+            : 'h-1.5 w-1.5 rounded-full bg-amber-500';
+      } else {
+        const z = fmtTimeParts(this.raceElapsedMs);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Parada';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-amber-500';
+      }
+      endHud();
       return;
     }
 
     if (this.phase === 'racing') {
-      const z = fmtTimeParts(this.raceElapsedMs);
-      this.ui.timerMain.textContent = z.main;
-      this.ui.timerFrac.textContent = z.frac;
-      this.ui.timerStatus.textContent = 'En Curso';
-      this.ui.timerDot.className = 'h-1.5 w-1.5 animate-pulse rounded-full bg-red-500';
+      if (this.sessionGameMode === 'time_attack') {
+        const rem = this.timeAttackRemainingMs();
+        const z = fmtTimeParts(rem);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'Time Attack';
+        this.ui.timerDot.className =
+          rem < 30_000
+            ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-red-500'
+            : 'h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500';
+      } else {
+        const z = fmtTimeParts(this.raceElapsedMs);
+        this.ui.timerMain.textContent = z.main;
+        this.ui.timerFrac.textContent = z.frac;
+        this.ui.timerStatus.textContent = 'En Curso';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 animate-pulse rounded-full bg-red-500';
+      }
+      endHud();
       return;
     }
 
@@ -574,21 +906,30 @@ export class MotoGame {
       const z = fmtTimeParts(this.finishedRaceMs);
       this.ui.timerMain.textContent = z.main;
       this.ui.timerFrac.textContent = z.frac;
-      this.ui.timerStatus.textContent = 'Meta';
-      this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.45)]';
+      if (this.timeAttackFailed) {
+        this.ui.timerStatus.textContent = "Time's up";
+        this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-rose-500';
+      } else {
+        this.ui.timerStatus.textContent = 'Meta';
+        this.ui.timerDot.className = 'h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(52,211,153,0.45)]';
+      }
     }
+    endHud();
   }
 
   private tick(): void {
     this.raf = window.requestAnimationFrame(() => this.tick());
 
     const dt = Math.min(0.05, this.clock.getDelta());
+    const tSec = performance.now() * 0.001;
+    for (let i = 0; i < this.obstacleCarGroups.length; i++) {
+      this.syncObstacleTransform(i, tSec);
+    }
     const raw = pollInput();
     const input = this.sessionStarted
       ? raw
       : { throttle: 0, brake: 0, steer: 0 };
 
-    const maxSpeed = PHYS.maxSpeed;
     const accel = PHYS.accel;
     const brake = PHYS.brake;
     const drag = PHYS.drag;
@@ -596,6 +937,17 @@ export class MotoGame {
     updatePedestrianPositions(this.pedestrians, performance.now() * 0.001, 6.35);
 
     const nowTick = performance.now();
+    if (this.turboBoostUntilMs !== null && nowTick >= this.turboBoostUntilMs) {
+      this.turboBoostUntilMs = null;
+    }
+    const maxSpeed = this.getEffectiveMaxSpeed();
+
+    this.syncTurboPickupVisibility();
+    for (const tp of this.turboPickups) {
+      if (tp.group.visible) {
+        updateTurboPickupFloat(tp, tSec, dt);
+      }
+    }
 
     if (this.phase === 'boarding') {
       this.speed = 0;
@@ -668,14 +1020,18 @@ export class MotoGame {
       let x = this.bike.position.x;
       let z = this.bike.position.z;
       if (canDrive) {
+        const greenFreePass = isInActiveGreenCorridor(x, z);
         let touchingVehicle = false;
-        for (const o of OBSTACLES) {
-          if (circleIntersectsObstacle(x, z, PLAYER_RADIUS, o)) touchingVehicle = true;
-          const res = resolveCircleObstacle(x, z, PLAYER_RADIUS, o);
-          if (res.hit) {
-            x = res.x;
-            z = res.z;
-            this.speed *= 0.35;
+        if (!greenFreePass) {
+          for (let oi = 0; oi < OBSTACLES.length; oi++) {
+            const o = obstacleAabbAtTime(OBSTACLES[oi]!, tSec);
+            if (circleIntersectsObstacle(x, z, PLAYER_RADIUS, o)) touchingVehicle = true;
+            const res = resolveCircleObstacle(x, z, PLAYER_RADIUS, o);
+            if (res.hit) {
+              x = res.x;
+              z = res.z;
+              this.speed *= 0.35;
+            }
           }
         }
         if (touchingVehicle && !this.wasTouchingVehicle) {
@@ -685,24 +1041,54 @@ export class MotoGame {
 
         const inPedZone = z >= PEDESTRIAN_ZONE_Z_MIN && z <= PEDESTRIAN_ZONE_Z_MAX;
         let touchingPedInZone = false;
-        for (const ped of this.pedestrians) {
-          const px = ped.group.position.x;
-          const pz = ped.group.position.z;
-          const dx = x - px;
-          const dz = z - pz;
-          const dist = Math.hypot(dx, dz);
-          const rr = PLAYER_RADIUS + ped.radius;
-          if (dist < rr && dist > 1e-5) {
-            if (inPedZone) touchingPedInZone = true;
-            x = px + (dx / dist) * rr;
-            z = pz + (dz / dist) * rr;
-            this.speed *= 0.38;
+        if (!greenFreePass) {
+          for (const ped of this.pedestrians) {
+            getPedestrianWorldXZ(ped, this.pedWorldScratch);
+            const px = this.pedWorldScratch.x;
+            const pz = this.pedWorldScratch.z;
+            const dx = x - px;
+            const dz = z - pz;
+            const dist = Math.hypot(dx, dz);
+            const rr = PLAYER_RADIUS + ped.radius;
+            if (dist < rr && dist > 1e-5) {
+              if (inPedZone) touchingPedInZone = true;
+              x = px + (dx / dist) * rr;
+              z = pz + (dz / dist) * rr;
+              this.speed *= 0.38;
+            }
           }
         }
         if (touchingPedInZone && !this.wasTouchingPedInZone) {
           this.applyContactTimePenalty();
         }
         this.wasTouchingPedInZone = touchingPedInZone;
+
+        const lat = getLateralDistanceToRoadMeters(x, z);
+        const off = getOffroadSeverity(lat);
+        if (off > 0) {
+          this.speed *= Math.exp(-PHYS.offRoadExtraDrag * off * dt);
+        }
+
+        const pickR = TURBO.pickupRadius + PLAYER_RADIUS * 0.88;
+        const pickR2 = pickR * pickR;
+        for (const tp of this.turboPickups) {
+          if (!tp.active) {
+            continue;
+          }
+          if (this.nextCheckpointIndex < tp.minNextCheckpointIndex) {
+            continue;
+          }
+          const dx = x - tp.x;
+          const dz = z - tp.z;
+          if (dx * dx + dz * dz <= pickR2) {
+            tp.active = false;
+            tp.group.visible = false;
+            this.turboBoostUntilMs = nowTick + TURBO.durationMs;
+            this.speed = Math.min(this.getEffectiveMaxSpeed(), this.speed + 2.8);
+            playCheckpointChime();
+            hapticCheckpoint();
+          }
+        }
       } else {
         this.wasTouchingVehicle = false;
         this.wasTouchingPedInZone = false;
@@ -710,6 +1096,30 @@ export class MotoGame {
       this.bike.position.x = x;
       this.bike.position.z = z;
       this.bike.position.y = SPAWN.position.y;
+
+      const yawNow = this.bike.rotation.y;
+      const yawRate = (yawNow - this.bikeDriftLastYaw) / Math.max(1e-4, dt);
+      const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
+      const steerAbs = Math.abs(steerSign);
+      const fromSteer = steerAbs * speedNorm * 0.64;
+      const fromTurn = Math.min(1, Math.abs(yawRate) * 0.5) * speedNorm;
+      const driftI = Math.min(1, fromSteer * 0.6 + fromTurn * 0.5);
+      const minDr = 0.1;
+      const isDrift = canDrive && Math.abs(this.speed) > 1.1 && driftI > minDr;
+      if (isDrift) {
+        const turnSign =
+          steerAbs > 0.04
+            ? Math.sign(steerSign)
+            : Math.abs(yawRate) > 0.07
+              ? -Math.sign(yawRate)
+              : 0;
+        const targetZ = turnSign === 0 ? 0 : -turnSign * 0.12 * driftI;
+        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, targetZ, 0.25);
+      } else {
+        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, 0, 0.22);
+      }
+      this.driftTrail.update(dt, isDrift ? driftI : 0, minDr, this.bike);
+      this.bikeDriftLastYaw = yawNow;
 
       if (canDrive && this.nextCheckpointIndex < CHECKPOINTS.length) {
         const cp = CHECKPOINTS[this.nextCheckpointIndex]!;
@@ -720,6 +1130,26 @@ export class MotoGame {
           this.beginStopExchange(isLast);
         }
       }
+
+      if (this.sessionStarted && this.phase === 'racing' && canDrive) {
+        this.checkVibeJamPortals(x, z);
+      }
+    }
+
+    if (this.vibeRingExit) {
+      this.vibeRingExit.rotation.y += dt * 0.45;
+    }
+    if (this.vibeRingBack) {
+      this.vibeRingBack.rotation.y += dt * 0.4;
+    }
+
+    if (
+      this.sessionStarted &&
+      this.phase === 'racing' &&
+      this.sessionGameMode === 'time_attack' &&
+      this.raceElapsedMs >= TIME_ATTACK_LIMIT_MS
+    ) {
+      this.failTimeAttack();
     }
 
     for (let i = this.sparks.length - 1; i >= 0; i--) {
@@ -740,14 +1170,21 @@ export class MotoGame {
     this.syncHud();
 
     if (this.sessionStarted) {
-      drawMinimap(this.ui.mapCanvas, {
-        x: this.bike.position.x,
-        z: this.bike.position.z,
-        rotY: this.bike.rotation.y,
-      });
+      for (let i = 0; i < OBSTACLES.length; i++) {
+        obstacleFootprintForMinimap(OBSTACLES[i]!, tSec, this.minimapObstacleFp[i]!);
+      }
+      drawMinimap(
+        this.ui.mapCanvas,
+        {
+          x: this.bike.position.x,
+          z: this.bike.position.z,
+          rotY: this.bike.rotation.y,
+        },
+        this.minimapObstacleFp,
+      );
     }
 
-    this.loopAudio.sync(this.sessionStarted, this.phase, this.speed, input.throttle, PHYS.maxSpeed);
+    this.loopAudio.sync(this.sessionStarted, this.phase, this.speed, input.throttle, this.getEffectiveMaxSpeed());
 
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.bike.quaternion);
     const back = forward.clone().multiplyScalar(-1);

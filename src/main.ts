@@ -1,5 +1,6 @@
 import './style.css';
 import { MotoGame } from './game/MotoGame';
+import { isVibeJamPortalArrival } from './lib/vibeJamPortal';
 import { mountSplashScreen } from './ui/splashScreen';
 
 function getAppHost(): HTMLElement {
@@ -29,6 +30,8 @@ function startGame(): void {
         activeGame = null;
         showSplash();
       },
+      /** Entrada webring: sin splash; inicio al instante (Vibe Jam 2026). */
+      vibeJamAutoStart: isVibeJamPortalArrival(),
     });
     activeGame = game;
     game.start();
@@ -39,4 +42,8 @@ function startGame(): void {
   }
 }
 
-showSplash();
+if (isVibeJamPortalArrival()) {
+  startGame();
+} else {
+  showSplash();
+}

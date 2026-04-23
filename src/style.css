@@ -160,6 +160,19 @@
   box-shadow: none;
 }
 
+/* Mando táctil: solo interactivo cuando el HUD de carrera está visible */
+.mtr-hud-on .mtr-touch-pad {
+  pointer-events: auto;
+}
+
+.mtr-touch-pad summary {
+  list-style: none;
+}
+
+.mtr-touch-pad summary::-webkit-details-marker {
+  display: none;
+}
+
 /* Selección tipo mockup */
 ::selection {
   background: rgb(245 158 11 / 0.3);
