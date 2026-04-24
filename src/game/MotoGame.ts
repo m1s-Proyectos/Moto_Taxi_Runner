@@ -290,12 +290,12 @@ export class MotoGame {
           setTiltInputOn(true);
           this.ui.btnTilt.setAttribute('aria-pressed', 'true');
           this.ui.btnTilt.classList.add('mtr-tilt-on');
-          this.ui.btnTilt.textContent = 'Incl. on';
+          this.ui.btnTilt.textContent = 'Giro on';
         } else {
           setTiltInputOn(false);
           this.ui.btnTilt.setAttribute('aria-pressed', 'false');
           this.ui.btnTilt.classList.remove('mtr-tilt-on');
-          this.ui.btnTilt.textContent = 'Incl. off';
+          this.ui.btnTilt.textContent = 'Giro off';
         }
       },
       { signal: tiltSig },
@@ -343,7 +343,7 @@ export class MotoGame {
     disposeTiltListener();
     this.ui.btnTilt.setAttribute('aria-pressed', 'false');
     this.ui.btnTilt.classList.remove('mtr-tilt-on');
-    this.ui.btnTilt.textContent = 'Incl. off';
+    this.ui.btnTilt.textContent = 'Giro off';
     this.detachPointerDriver?.();
     this.detachPointerDriver = null;
     this.detachMouseAim?.();
@@ -367,17 +367,6 @@ export class MotoGame {
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
     this.renderer.domElement.focus({ preventScroll: true });
-    if (typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
-      void (async () => {
-        if (await requestTiltPermissionIfNeeded()) {
-          setTiltRecalibrationPending();
-          setTiltInputOn(true);
-          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
-          this.ui.btnTilt.classList.add('mtr-tilt-on');
-          this.ui.btnTilt.textContent = 'Incl. on';
-        }
-      })();
-    }
   }
 
   private applyBikeStyle(style: BikeStyle): void {

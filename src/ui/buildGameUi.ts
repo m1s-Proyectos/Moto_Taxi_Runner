@@ -320,10 +320,10 @@ export function buildGameUi(
   btnTilt.type = 'button';
   btnTilt.dataset.role = 'tilt';
   btnTilt.setAttribute('aria-pressed', 'false');
-  btnTilt.setAttribute('aria-label', 'Inclinación: giro, avance recto, inclinar atrás para frenar');
+  btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar solo con la flecha)');
   btnTilt.className =
     'mtr-touch-tilt pointer-events-auto shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors';
-  btnTilt.textContent = 'Incl. off';
+  btnTilt.textContent = 'Giro off';
 
   const touchRow = document.createElement('div');
   touchRow.className =
@@ -340,7 +340,7 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Avanza con la flecha central. Las laterales giran. Activa Incl. para giro/adelantar y frenar con la posición del teléfono (pide permiso en iPhone). Doble toque en Incl. = nueva calibración de «recto». Freno: S/flecha abajo o inclinar el móvil atrás si usas Incl.';
+    'Acelera con la flecha central. Activa Giro y mantén el teléfono como al activar: de ahí, inclinar a lados = gira (permiso de movimiento en iPhone). Doble toque en Giro = recalibrar. Los botones de giro y el Giro se pueden combinar. Freno: S / flecha abajo.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');

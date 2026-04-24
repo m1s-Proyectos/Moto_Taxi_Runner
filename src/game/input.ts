@@ -18,20 +18,27 @@ let padForward = false;
 let mouseAimSteer = 0;
 let useMouseAim = false;
 
-/** Inclinación del dispositivo: giro + adelantar/retroceder (móvil; requiere activar y permisos en iOS). */
+/**
+ * Giro por inclinación relativa (solo izq/der; acelerar sigue con la flecha u otros).
+ * Requiere activar; en iOS 13+ permiso de orientación. Se toma un centro al activar o al recalibrar.
+ */
 let tiltInputOn = false;
-let tiltRefBeta: number | null = null;
 let tiltSteer = 0;
-let tiltThrottle = 0;
-let tiltBrake = 0;
+let tiltRefG: number | null = null;
+let tiltRefB: number | null = null;
+let tiltCalAccG = 0;
+let tiltCalAccB = 0;
+let tiltCalCountG = 0;
+let tiltCalCountB = 0;
+let tiltCalTicks = 0;
 let tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null;
-let motionHandler: ((e: DeviceMotionEvent) => void) | null = null;
 let tiltHandlerAttached = false;
-let motionHandlerAttached = false;
 let orientationSteer = 0;
-let motionSteer = 0;
-const MOTION_SMOOTH = 0.72;
-const MOTION_RATE_SCALE = 0.00085;
+const TILT_CAL_MIN = 3;
+const TILT_CAL_MAX_WAIT = 18;
+const TILT_SENSE_P = 0.05;
+const TILT_SENSE_L_G = 0.052;
+const TILT_SENSE_L_B = 0.045;
 
 function readSteerKeys(): number {
   let s = 0;
@@ -121,89 +128,95 @@ export function attachPointerDriver(el: HTMLElement): () => void {
   };
 }
 
-/**
- * En portrait `gamma` suele ser el balanceo izq/der. En apaisado el mismo giro físico
- * a menudo mueve `beta` hacia/ desde 90 (y `gamma` a veces ~0) — se combina beta+gamma.
- */
-function orientationSteerFromTilt(b: number | null, g: number | null): number {
-  if (b == null && g == null) return 0;
+function resetTiltCalibration(): void {
+  tiltRefG = null;
+  tiltRefB = null;
+  tiltCalAccG = 0;
+  tiltCalAccB = 0;
+  tiltCalCountG = 0;
+  tiltCalCountB = 0;
+  tiltCalTicks = 0;
+  orientationSteer = 0;
+  tiltSteer = 0;
+}
+
+/** Giro a partir de la diferencia respecto al pose «neutro» calibrada (no valores absolutos). */
+function relativeSteerFromTilt(
+  b: number | null,
+  g: number | null,
+  rG: number,
+  rB: number,
+): number {
   const w = typeof window !== 'undefined' ? window.innerWidth : 0;
   const h = typeof window !== 'undefined' ? window.innerHeight : 0;
   const isLandscape = w > 0 && h > 0 && w > h;
   if (isLandscape) {
-    const gVal = g ?? 0;
-    if (b != null && Math.abs(gVal) < 3.2) {
-      return Math.max(-1, Math.min(1, -(b - 90) / 25));
+    const dg = g != null ? g - rG : 0;
+    const db = b != null ? b - rB : 0;
+    if (b != null && g != null) {
+      return Math.max(-1, Math.min(1, dg * TILT_SENSE_L_G + db * TILT_SENSE_L_B));
     }
-    const gPart = (gVal / 30) * 0.65;
-    const bPart = b != null ? (-(b - 90) / 30) * 0.6 : 0;
-    return Math.max(-1, Math.min(1, gPart + bPart));
+    if (b != null) {
+      return Math.max(-1, Math.min(1, db * (TILT_SENSE_L_B * 1.2)));
+    }
+    if (g != null) {
+      return Math.max(-1, Math.min(1, dg * (TILT_SENSE_L_G * 1.1)));
+    }
+    return 0;
   }
   if (g != null) {
-    return Math.max(-1, Math.min(1, g / 32));
+    return Math.max(-1, Math.min(1, (g - rG) * TILT_SENSE_P));
   }
-  return b != null ? Math.max(-1, Math.min(1, -(b - 90) / 36)) : 0;
+  if (b != null) {
+    return Math.max(-1, Math.min(1, (b - rB) * (TILT_SENSE_P * 0.85)));
+  }
+  return 0;
+}
+
+function tryFinishTiltCalibration(b: number | null, g: number | null): void {
+  if (g != null) {
+    tiltCalAccG += g;
+    tiltCalCountG++;
+  }
+  if (b != null) {
+    tiltCalAccB += b;
+    tiltCalCountB++;
+  }
+  tiltCalTicks++;
+  const w = typeof window !== 'undefined' ? window.innerWidth : 0;
+  const h = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const isLandscape = w > 0 && h > 0 && w > h;
+  const haveEnoughG = tiltCalCountG >= TILT_CAL_MIN;
+  const haveEnough =
+    haveEnoughG && (!isLandscape || tiltCalCountB >= 1 || tiltCalTicks >= 10);
+  const force =
+    tiltCalTicks >= TILT_CAL_MAX_WAIT && (tiltCalCountG >= 1 || tiltCalCountB >= 1);
+  if (haveEnough || force) {
+    tiltRefG = tiltCalCountG > 0 ? tiltCalAccG / tiltCalCountG : 0;
+    tiltRefB = tiltCalCountB > 0 ? tiltCalAccB / tiltCalCountB : 90;
+  }
 }
 
 function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   if (!tiltInputOn) {
     tiltSteer = 0;
-    tiltThrottle = 0;
-    tiltBrake = 0;
     return;
   }
   const b = e.beta;
   const g = e.gamma;
   if (b == null && g == null) return;
 
-  if (b != null) {
-    if (tiltRefBeta === null) tiltRefBeta = b;
-    const db = b - tiltRefBeta;
-    const backDeg = 6;
-    if (db > backDeg) {
-      tiltBrake = Math.min(1, (db - backDeg) / 22);
-      tiltThrottle = 0;
-    } else {
-      tiltBrake = 0;
-      tiltThrottle = 1;
+  if (tiltRefG === null) {
+    tryFinishTiltCalibration(b, g);
+    if (tiltRefG === null) {
+      return;
     }
-  } else {
-    tiltBrake = 0;
-    /** Sin beta: solo eje de giro (poco habitual); mantiene avance. */
-    tiltThrottle = g != null ? 1 : 0;
   }
 
-  orientationSteer = orientationSteerFromTilt(b, g);
-  mergeTiltSteerValue();
-}
-
-function mergeTiltSteerValue(): void {
-  if (!tiltInputOn) {
-    tiltSteer = 0;
-    return;
-  }
-  tiltSteer = Math.max(
-    -1,
-    Math.min(1, orientationSteer * 0.8 + Math.max(-1, Math.min(1, motionSteer * 0.9)) * 0.5),
-  );
-}
-
-function updateTiltFromMotion(e: DeviceMotionEvent): void {
-  if (!tiltInputOn) {
-    motionSteer = 0;
-    return;
-  }
-  const rr = e.rotationRate;
-  if (!rr) return;
-  const w = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
-  const raw =
-    w && (rr.gamma == null || Math.abs(rr.gamma) < 1.2)
-      ? (rr.beta ?? 0) * 0.55 + (rr.gamma ?? 0) * 0.35
-      : (rr.gamma ?? 0);
-  const t = raw * MOTION_RATE_SCALE;
-  motionSteer = motionSteer * MOTION_SMOOTH + t * (1 - MOTION_SMOOTH);
-  motionSteer = Math.max(-1, Math.min(1, motionSteer));
-  mergeTiltSteerValue();
+  const rG = tiltRefG ?? 0;
+  const rB = tiltRefB ?? 90;
+  orientationSteer = relativeSteerFromTilt(b, g, rG, rB);
+  tiltSteer = Math.max(-1, Math.min(1, orientationSteer));
 }
 
 function ensureTiltListener(): void {
@@ -213,45 +226,27 @@ function ensureTiltListener(): void {
   tiltHandlerAttached = true;
 }
 
-function ensureMotionListener(): void {
-  if (motionHandlerAttached) return;
-  motionHandler = (e) => updateTiltFromMotion(e);
-  window.addEventListener('devicemotion', motionHandler, { passive: true } as AddEventListenerOptions);
-  motionHandlerAttached = true;
-}
-
-/** Inclina el dispositivo: activa el listener; en iOS 13+ hay que pedir permiso antes. */
+/** Activa giro por inclinación (solo giro, no acelerar). En iOS 13+ pedir permiso antes. */
 export function setTiltInputOn(on: boolean): void {
   tiltInputOn = on;
   if (on) {
     ensureTiltListener();
-    ensureMotionListener();
+    resetTiltCalibration();
   } else {
-    orientationSteer = 0;
-    motionSteer = 0;
-    tiltSteer = 0;
-    tiltThrottle = 0;
-    tiltBrake = 0;
+    resetTiltCalibration();
   }
 }
 
 export function setTiltRecalibrationPending(): void {
-  tiltRefBeta = null;
+  resetTiltCalibration();
 }
 
-/**
- * iOS 13+ Safari: orientación y movimiento requieren permisos distintos; pide ambos.
- */
+/** iOS 13+ Safari: solo hace falta el permiso de orientación para giro. */
 export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
   const D = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
-  const M = DeviceMotionEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
   if (typeof D.requestPermission === 'function') {
     const o = await D.requestPermission();
     if (o !== 'granted') return false;
-  }
-  if (typeof M.requestPermission === 'function') {
-    const m = await M.requestPermission();
-    if (m !== 'granted') return false;
   }
   return true;
 }
@@ -260,15 +255,9 @@ export function disposeTiltListener(): void {
   if (tiltHandler && tiltHandlerAttached) {
     window.removeEventListener('deviceorientation', tiltHandler);
   }
-  if (motionHandler && motionHandlerAttached) {
-    window.removeEventListener('devicemotion', motionHandler);
-  }
   tiltHandler = null;
-  motionHandler = null;
   tiltHandlerAttached = false;
-  motionHandlerAttached = false;
   setTiltInputOn(false);
-  tiltRefBeta = null;
 }
 
 /**
@@ -319,8 +308,8 @@ export function pollInput(): InputState {
   const aim = useMouseAim ? mouseAimSteer : 0;
   const tS = tiltInputOn ? tiltSteer : 0;
   const steer = Math.max(-1, Math.min(1, kSteer + pSteer + ptrSteer + aim + tS));
-  const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0, tiltInputOn ? tiltThrottle : 0);
-  const brake = Math.max(kBrake, tiltInputOn ? tiltBrake : 0);
+  const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0);
+  const brake = kBrake;
 
   return {
     throttle,
