@@ -50,21 +50,21 @@ const TILT_SENSE_L_B = 0.045;
 const TILT_DEADZONE = 0.04;
 const TILT_SMOOTH = 0.12;
 
-const W_STEER_KEY = 0.85;
+const W_STEER_KEY = 1.0;
 const W_STEER_PAD = 1.0;
 const W_STEER_POINTER = 0.8;
-const W_STEER_MOUSE = 0.95;
+const W_STEER_MOUSE = 0.85;
 const W_STEER_TILT = 0.6;
 const W_STEER_TILT_WITH_POINTER = 0.25;
 /** Curva suave; más cercana a 1 = giro más directo (mejor con ratón en PC). */
 const STEER_NONLINEAR_EXP = 1.05;
 /** (nx-0.5) * escala → -1..1. */
-const CANVAS_X_STEER_MULT = 2.2;
+const CANVAS_X_STEER_MULT = 1.6;
 
 /** Mouse sensitivity configuration */
-const MOUSE_SENSITIVITY = 0.8;
-const MOUSE_SMOOTHING = 0.15;
-const MOUSE_MAX_DELTA = 0.3;
+const MOUSE_SENSITIVITY = 0.5;
+const MOUSE_SMOOTHING = 0.25;
+const MOUSE_MAX_DELTA = 0.2;
 
 /** Mouse smoothing state */
 let mouseRawSteer = 0;
@@ -100,11 +100,14 @@ export function attachKeyboard(): () => void {
   const up = (e: KeyboardEvent) => {
     keys.delete(e.key.toLowerCase());
   };
-  window.addEventListener('keydown', down);
-  window.addEventListener('keyup', up);
+  
+  // Use capture phase for faster response
+  window.addEventListener('keydown', down, { capture: true, passive: false });
+  window.addEventListener('keyup', up, { capture: true, passive: false });
+  
   return () => {
-    window.removeEventListener('keydown', down);
-    window.removeEventListener('keyup', up);
+    window.removeEventListener('keydown', down, true);
+    window.removeEventListener('keyup', up, true);
   };
 }
 
@@ -351,6 +354,7 @@ export function attachMouseAim(el: HTMLElement): () => void {
     const nx = (e.clientX - r.left) / r.width;
     mouseRawSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
     
+    // More aggressive smoothing for better control
     mouseSmoothedSteer += (mouseRawSteer - mouseSmoothedSteer) * MOUSE_SMOOTHING;
     mouseAimSteer = mouseSmoothedSteer;
     
