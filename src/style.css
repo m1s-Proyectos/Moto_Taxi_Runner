@@ -165,9 +165,19 @@
   pointer-events: auto;
 }
 
-/* Mando: izq./der. a bordes, gas + Giro al centro. */
+/* Mando móvil: L/R a la izquierda; gas y freno a la derecha; Giro encima; multitacto. */
 .mtr-touch-pad .mtr-touch-bar {
   min-height: 2.5rem;
+}
+
+.mtr-touch-pad .mtr-two-thumb {
+  align-items: flex-end;
+}
+
+.mtr-touch-pad .mtr-touch-throttle,
+.mtr-touch-pad .mtr-touch-brake,
+.mtr-touch-pad .mtr-touch-steer {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mtr-touch-pad summary {

@@ -9,10 +9,11 @@ const keys = new Set<string>();
 let pointerDriving = false;
 let pointerSteer = 0;
 
-/** Mando en pantalla: izq. / dcha. (giro) y adelante (acelerar); independiente por botón, multitacto. */
+/** Mando en pantalla: izq. / dcha. (giro), adelante (acelerar), freno; independiente por botón, multitacto. */
 let padLeft = false;
 let padRight = false;
 let padForward = false;
+let padBrake = false;
 
 /** Giro con posición del ratón sobre el lienzo (PC con puntero fino; sin acelerar solo). */
 let mouseAimSteer = 0;
@@ -50,10 +51,15 @@ const W_STEER_POINTER = 0.8;
 const W_STEER_MOUSE = 0.95;
 const W_STEER_TILT = 0.6;
 const W_STEER_TILT_WITH_POINTER = 0.25;
-/** Curva global un poco más lineal: el exp alto hacía el giro “lento” en PC (ratón / puntero). */
-const STEER_NONLINEAR_EXP = 1.18;
-/** (nx-0.5) * escala → -1..1: más ancho hace el giro más reactivo con el cursor. */
-const CANVAS_X_STEER_MULT = 3.2;
+/** Curva suave; más cercana a 1 = giro más directo (mejor con ratón en PC). */
+const STEER_NONLINEAR_EXP = 1.05;
+/** (nx-0.5) * escala → -1..1. */
+const CANVAS_X_STEER_MULT = 3.45;
+
+/** Si el juego (p. ej. MotoGame) ajusta la respuesta con puntero fino sobre el lienzo. */
+export function isMouseAimInputActive(): boolean {
+  return useMouseAim;
+}
 
 function readSteerKeys(): number {
   let s = 0;
@@ -326,7 +332,6 @@ export function pollInput(): InputState {
   const kBrake = readBrakeKeys();
 
   const pSteer = padSteerValue();
-  const pThrottle = padForward ? 1 : 0;
   const ptrSteer = pointerDriving ? pointerSteer : 0;
   const aim = useMouseAim ? mouseAimSteer : 0;
   const ptr = pointerDriving ? ptrSteer : 0;
@@ -351,11 +356,20 @@ export function pollInput(): InputState {
     tForBlend * tiltWeight;
   const steerWeighted = Math.max(-1, Math.min(1, steerWeightedUnclamped));
 
-  const steerCurved = applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
+  const pureMouseSteer =
+    useMouseAim &&
+    !pointerDriving &&
+    !tiltInputOn &&
+    Math.abs(pSteer) < 0.001 &&
+    Math.abs(kSteer) < 0.001;
+  const steerCurved = pureMouseSteer
+    ? steerWeighted
+    : applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
   const steer = Math.max(-1, Math.min(1, steerCurved));
 
+  const pThrottle = padBrake ? 0 : (padForward ? 1 : 0);
   const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0);
-  const brake = kBrake;
+  const brake = Math.max(kBrake, padBrake ? 1 : 0);
 
   return {
     throttle,
@@ -372,13 +386,14 @@ function padSteerValue(): number {
 }
 
 /**
- * Tres botones: adelante (acelerar), izquierda, derecha. El giro aplica al eje de la moto
- * (yaw; la física ya usa `steer` respecto a la orientación hacia adelante).
+ * Mando táctil: izquierda, derecha, adelante, freno. Cada botón usa su propia captura de puntero
+ * (multitacto: ambas manos a la vez). Si freno y adelante están pulsados, el freno gana al gas del mando.
  */
 export function attachTouchPad(els: {
   forward: HTMLElement;
   left: HTMLElement;
   right: HTMLElement;
+  brake: HTMLElement;
 }): () => void {
   const downF = (e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -443,6 +458,27 @@ export function attachTouchPad(els: {
   const loseR = () => {
     padRight = false;
   };
+  const downB = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try {
+      els.brake.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    padBrake = true;
+  };
+  const upB = (e: PointerEvent) => {
+    padBrake = false;
+    try {
+      els.brake.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+  const loseB = () => {
+    padBrake = false;
+  };
 
   els.forward.addEventListener('pointerdown', downF);
   els.forward.addEventListener('pointerup', upF);
@@ -456,11 +492,16 @@ export function attachTouchPad(els: {
   els.right.addEventListener('pointerup', upR);
   els.right.addEventListener('pointercancel', upR);
   els.right.addEventListener('lostpointercapture', loseR);
+  els.brake.addEventListener('pointerdown', downB);
+  els.brake.addEventListener('pointerup', upB);
+  els.brake.addEventListener('pointercancel', upB);
+  els.brake.addEventListener('lostpointercapture', loseB);
 
   return () => {
     padLeft = false;
     padRight = false;
     padForward = false;
+    padBrake = false;
     els.forward.removeEventListener('pointerdown', downF);
     els.forward.removeEventListener('pointerup', upF);
     els.forward.removeEventListener('pointercancel', upF);
@@ -473,5 +514,9 @@ export function attachTouchPad(els: {
     els.right.removeEventListener('pointerup', upR);
     els.right.removeEventListener('pointercancel', upR);
     els.right.removeEventListener('lostpointercapture', loseR);
+    els.brake.removeEventListener('pointerdown', downB);
+    els.brake.removeEventListener('pointerup', upB);
+    els.brake.removeEventListener('pointercancel', upB);
+    els.brake.removeEventListener('lostpointercapture', loseB);
   };
 }

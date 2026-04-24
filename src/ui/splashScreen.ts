@@ -129,7 +129,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
           <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
           <span class="inline-flex items-center gap-1.5"><span class="text-zinc-500">Reiniciar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">R</kbd></span>
         </div>
-        <p class="mt-1.5 border-t border-zinc-800/60 pt-1.5 text-[9px] leading-snug text-zinc-500">${icDevice}<span class="text-zinc-400">Móvil:</span> ← y → a los bordes, gas y Giro al centro; <span class="text-zinc-500">Giro on</span> = inclinación (solo móvil) · <span class="text-zinc-400">PC:</span> ratón, W, A/D, sin giroscopio en navegador</p>
+        <p class="mt-1.5 border-t border-zinc-800/60 pt-1.5 text-[9px] leading-snug text-zinc-500">${icDevice}<span class="text-zinc-400">Móvil:</span> a dos manos: girar a la izquierda, gas y freno a la derecha; <span class="text-zinc-500">Giro on</span> = inclinación (solo móvil) · <span class="text-zinc-400">PC:</span> ratón, W, S, A/D, sin giro en navegador</p>
       </div>
     </div>
 

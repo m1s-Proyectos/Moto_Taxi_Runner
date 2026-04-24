@@ -20,10 +20,11 @@ export type GameUiRefs = {
   /** Contenedor (mostrar con turbo activo) + relleno 0–100%. */
   turboHudWrap: HTMLElement;
   turboBarFill: HTMLElement;
-  /** Mando táctil (móvil): adelante + giro, enlazado en `input.attachTouchPad`. */
+  /** Mando táctil (móvil); enlazado en `input.attachTouchPad` (L/R, gas, freno). */
   btnTouchLeft: HTMLButtonElement;
   btnTouchForward: HTMLButtonElement;
   btnTouchRight: HTMLButtonElement;
+  btnTouchBrake: HTMLButtonElement;
   /** Móvil: giro/adelante/frenar vía giroscopio (incl.); permiso en iOS al activar. */
   btnTilt: HTMLButtonElement;
   pingBadge: HTMLElement;
@@ -51,6 +52,8 @@ export type GameUiRefs = {
   passengerHud: HTMLElement;
   passengerLabel: HTMLElement;
   passengerArrow: HTMLElement;
+  /** Aviso PC (teclado / ratón) al arrancar; se muestra 5s desde `MotoGame`. */
+  pcControlsHint: HTMLElement;
 };
 
 function iconForStop(index: 0 | 1 | 2, state: 'done' | 'current' | 'pending'): string {
@@ -290,54 +293,77 @@ export function buildGameUi(
     '<svg class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12H3M3 12l6-6M3 12l6 6"/></svg>';
   const arrowRight =
     '<svg class="h-9 w-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18M21 12l-6-6M21 12l-6 6"/></svg>';
-  const arrowUp =
-    '<svg class="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+  /** Flecha + marcas de velocidad (acelerar). */
+  const iconTouchAccel = `<span class="flex flex-col items-center gap-0.5"><span class="flex gap-0.5 opacity-80" aria-hidden="true">
+<svg class="h-1.5 w-1.5" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M4 0L8 4H0L4 0z"/></svg>
+<svg class="h-1.5 w-2" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M4 0L8 4H0L4 0z"/></svg>
+<svg class="h-1.5 w-2.5" viewBox="0 0 8 8" fill="currentColor" aria-hidden="true"><path d="M4 0L8 4H0L4 0z"/></svg>
+</span>
+<svg class="h-8 w-8 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V4M4 12l8-8 8 8"/></svg></span>`;
+  /** Símbolo de stop (freno). */
+  const iconTouchBrake = `<svg class="h-7 w-7 sm:h-8 sm:w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+<path d="M9.3 2.2h5.4L22 7.3v9.4l-7.1 5.1H9.3L2 16.7V7.3L9.3 2.2z" fill="currentColor" fill-opacity="0.22"/>
+<path d="M8.5 9.5h7v1.5h-7V9.5zm0 3.5h7v1.4h-7V13z" fill="currentColor"/></svg>`;
+
+  const touchSteerClass =
+    'mtr-touch-btn mtr-touch-steer flex h-[3.7rem] w-[3.7rem] min-h-[3.4rem] min-w-[3.4rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-slate-500/75 bg-zinc-900/95 text-slate-100 shadow-md shadow-black/35 transition-transform active:scale-[0.97] sm:h-16 sm:min-h-16 sm:w-16 sm:min-w-16';
 
   const btnTouchLeft = document.createElement('button');
   btnTouchLeft.type = 'button';
   btnTouchLeft.dataset.role = 'touch-left';
   btnTouchLeft.setAttribute('aria-label', 'Girar a la izquierda');
-  btnTouchLeft.className =
-    'mtr-touch-btn mtr-touch-side flex h-[3.6rem] w-[4rem] min-h-[3.5rem] min-w-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-zinc-600/80 bg-zinc-900/95 text-zinc-100 shadow-md shadow-black/30 transition-transform active:scale-[0.97] sm:h-[3.75rem] sm:min-h-[3.75rem] sm:w-[4.5rem] sm:min-w-[4.25rem]';
+  btnTouchLeft.className = touchSteerClass;
   btnTouchLeft.innerHTML = arrowLeft;
-
-  const btnTouchForward = document.createElement('button');
-  btnTouchForward.type = 'button';
-  btnTouchForward.dataset.role = 'touch-forward';
-  btnTouchForward.setAttribute('aria-label', 'Acelerar (adelante)');
-  btnTouchForward.className =
-    'mtr-touch-btn flex h-[3.9rem] w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-amber-500/45 bg-zinc-900/95 text-amber-100 shadow-lg shadow-amber-900/20 transition-transform active:scale-[0.98] sm:h-[4.25rem] sm:w-[4.25rem]';
-  btnTouchForward.innerHTML = arrowUp;
 
   const btnTouchRight = document.createElement('button');
   btnTouchRight.type = 'button';
   btnTouchRight.dataset.role = 'touch-right';
   btnTouchRight.setAttribute('aria-label', 'Girar a la derecha');
-  btnTouchRight.className = btnTouchLeft.className;
+  btnTouchRight.className = touchSteerClass;
   btnTouchRight.innerHTML = arrowRight;
+
+  const btnTouchForward = document.createElement('button');
+  btnTouchForward.type = 'button';
+  btnTouchForward.dataset.role = 'touch-forward';
+  btnTouchForward.setAttribute('aria-label', 'Acelerar (gas)');
+  btnTouchForward.className =
+    'mtr-touch-btn mtr-touch-throttle flex h-[4.35rem] w-[4.1rem] min-h-[4rem] min-w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-amber-400/55 bg-gradient-to-b from-zinc-800/95 to-zinc-900/95 text-amber-100 shadow-lg shadow-amber-950/30 transition-transform active:scale-[0.98] sm:h-[4.5rem] sm:min-h-[4.4rem] sm:w-[4.25rem] sm:min-w-[4rem]';
+  btnTouchForward.innerHTML = iconTouchAccel;
+
+  const btnTouchBrake = document.createElement('button');
+  btnTouchBrake.type = 'button';
+  btnTouchBrake.dataset.role = 'touch-brake';
+  btnTouchBrake.setAttribute('aria-label', 'Frenar');
+  btnTouchBrake.className =
+    'mtr-touch-btn mtr-touch-brake flex h-14 w-[4.1rem] min-h-[3.4rem] touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-rose-500/50 bg-zinc-900/95 text-rose-200 shadow-md shadow-rose-950/25 transition-transform active:scale-[0.97] sm:h-[3.75rem] sm:w-[4.25rem]';
+  btnTouchBrake.innerHTML = iconTouchBrake;
 
   const btnTilt = document.createElement('button');
   btnTilt.type = 'button';
   btnTilt.dataset.role = 'tilt';
   btnTilt.setAttribute('aria-pressed', 'false');
-  btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar solo con la flecha)');
+  btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar con el botón de gas a la derecha)');
   btnTilt.className =
-    'mtr-touch-tilt pointer-events-auto shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors';
+    'mtr-touch-tilt pointer-events-auto w-full max-w-[8.5rem] shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors';
   btnTilt.textContent = 'Giro off';
 
   const touchRow = document.createElement('div');
   touchRow.className =
-    'mtr-touch-bar mx-auto flex w-full max-w-[100vw] items-end justify-between gap-0 px-1 pl-[max(0.35rem,env(safe-area-inset-left))] pr-[max(0.35rem,env(safe-area-inset-right))] sm:px-2';
+    'mtr-touch-bar mtr-two-thumb mx-auto flex w-full max-w-[100vw] items-end justify-between gap-1 px-0.5 pl-[max(0.35rem,env(safe-area-inset-left))] pr-[max(0.35rem,env(safe-area-inset-right))] sm:gap-2 sm:px-1';
+
   const touchColLeft = document.createElement('div');
-  touchColLeft.className = 'flex min-w-0 max-w-[38%] flex-1 justify-start self-end';
-  const touchColCenter = document.createElement('div');
-  touchColCenter.className = 'mtr-touch-center -mt-0.5 flex max-w-[34%] shrink-0 flex-col items-center justify-end gap-1.5 self-end px-0.5';
+  touchColLeft.className =
+    'mtr-touch-cluster-left flex min-h-0 min-w-0 max-w-[48%] flex-1 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1';
+  const steerRow = document.createElement('div');
+  steerRow.className = 'mtr-steer-pair flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-2.5';
+  steerRow.append(btnTouchLeft, btnTouchRight);
+  touchColLeft.append(btnTilt, steerRow);
+
   const touchColRight = document.createElement('div');
-  touchColRight.className = 'flex min-w-0 max-w-[38%] flex-1 justify-end self-end';
-  touchColLeft.append(btnTouchLeft);
-  touchColCenter.append(btnTilt, btnTouchForward);
-  touchColRight.append(btnTouchRight);
-  touchRow.append(touchColLeft, touchColCenter, touchColRight);
+  touchColRight.className =
+    'mtr-touch-cluster-right flex min-h-0 min-w-0 max-w-[48%] flex-1 flex-col items-end justify-end gap-1.5 self-end pr-0.5 sm:pr-1';
+  touchColRight.append(btnTouchBrake, btnTouchForward);
+  touchRow.append(touchColLeft, touchColRight);
 
   const touchDetails = document.createElement('details');
   touchDetails.className = 'mx-auto mt-0.5 w-full max-w-sm px-3 text-center';
@@ -349,7 +375,7 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Flecha central = gas. ← y → a los bordes (cerca de cada pulgar). Giro por inclinación solo en móvil (no en PC). Giro = calibrar al activar; doble toque = recalibrar. Más teclas: S / ↓ freno. Botones y Giro se pueden combinar.';
+    'Mando a dos manos: ← y → a la izquierda (pulgar); gas y freno a la derecha, juntos. Giro por inclinación solo en móvil. Activa Giro y calibra; doble toque = recalibrar. En PC: teclado o ratón. S / ↓ sigue siendo freno. Multitacto: puedes combinar giro, gas y freno.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
@@ -363,7 +389,7 @@ export function buildGameUi(
   const passengerHud = document.createElement('div');
   passengerHud.dataset.role = 'passenger-hud';
   passengerHud.className =
-    'pointer-events-none fixed bottom-28 left-1/2 z-20 max-md:bottom-44 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
+    'pointer-events-none fixed bottom-28 left-1/2 z-20 max-md:bottom-48 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
   const passengerInner = document.createElement('div');
   passengerInner.className =
     'flex items-center justify-center gap-3 rounded-2xl border border-amber-500/35 bg-zinc-950/90 px-4 py-3 shadow-lg shadow-black/40 backdrop-blur-md';
@@ -382,7 +408,20 @@ export function buildGameUi(
   passengerLabel.textContent = 'Pasajero';
   passengerInner.append(passengerIconWrap, passengerArrow, passengerLabel);
   passengerHud.append(passengerInner);
-  hudRoot.append(passengerHud);
+
+  const pcControlsHint = document.createElement('div');
+  pcControlsHint.dataset.role = 'pc-controls-hint';
+  pcControlsHint.setAttribute('role', 'status');
+  pcControlsHint.setAttribute('aria-live', 'polite');
+  pcControlsHint.className =
+    'mtr-pc-control-hint pointer-events-none fixed left-1/2 top-[min(28%,8rem)] z-30 flex hidden w-[min(92vw,22rem)] -translate-x-1/2 flex-col items-center sm:top-[min(32%,7.5rem)] sm:w-96';
+  const pcControlsHintBox = document.createElement('p');
+  pcControlsHintBox.className =
+    'w-full rounded-2xl border-2 border-amber-400/90 bg-zinc-950/98 px-4 py-4 text-center text-[0.85rem] font-semibold leading-relaxed text-amber-50 shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_50px_rgba(0,0,0,0.65),0_0_40px_rgba(245,158,11,0.2)] sm:px-5 sm:py-4 sm:text-base';
+  pcControlsHintBox.textContent =
+    'Puedes usar el teclado o arrastrar el ratón en el juego para moverte (W, S, A, D, clic sostenido).';
+  pcControlsHint.append(pcControlsHintBox);
+  hudRoot.append(pcControlsHint, passengerHud);
 
   container.appendChild(hudRoot);
 
@@ -625,6 +664,7 @@ export function buildGameUi(
     btnTouchLeft,
     btnTouchForward,
     btnTouchRight,
+    btnTouchBrake,
     btnTilt,
     pingBadge,
     menuOverlay,
@@ -649,5 +689,6 @@ export function buildGameUi(
     passengerHud,
     passengerLabel,
     passengerArrow,
+    pcControlsHint,
   };
 }

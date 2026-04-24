@@ -61,6 +61,7 @@ import {
   attachPointerDriver,
   attachTouchPad,
   disposeTiltListener,
+  isMouseAimInputActive,
   pollInput,
   requestTiltPermissionIfNeeded,
   setTiltInputOn,
@@ -112,6 +113,17 @@ const TA_BAR_OK =
 const TA_BAR_LOW =
   'h-full w-full min-w-0 max-w-full rounded-full bg-gradient-to-r from-red-700 via-red-500 to-amber-400 transition-[width] duration-200 ease-out';
 
+/** Suavizado con Δt (evita muelle distinto a 60/120 fps). Más λ = sigue al input antes. */
+const SMOOTH_STEER_IN_HZ = 19;
+const SMOOTH_STEER_IN_MOUSE_HZ = 27;
+const SMOOTH_STEER_RELEASE_HZ = 16;
+const SMOOTH_CAMERA_FOLLOW_HZ = 18;
+const SMOOTH_LEAN_HZ = 24;
+const SMOOTH_LEAN_RESET_HZ = 20;
+/** Sin gas: freno motor fuerte (suelta clic/ratón o tecla y la moto cae a 0 enseguida). */
+const COAST_DRAG_MULT = 3.5;
+const COAST_STOP_SPEED_EPS = 0.2;
+
 export type MotoGameOptions = {
   /** Cierra el juego y deja que la app vuelva al splash (p. ej. botón «Volver a inicio»). */
   onBackToHome?: () => void;
@@ -159,6 +171,7 @@ export class MotoGame {
   private boardingUntilMs: number | null = null;
   private exchangeUntilMs: number | null = null;
   private exchangeMode: 'drop' | 'pick' | 'final_drop' | null = null;
+  private pcControlsHintTimeout: number | null = null;
 
   private speed = 0;
   private currentSteer = 0;
@@ -203,12 +216,17 @@ export class MotoGame {
     const initialBike = readStoredBikeStyle();
     this.bikeStyle = initialBike;
 
+    const preferMsaa =
+      typeof window === 'undefined' || !window.matchMedia('(pointer: coarse)').matches;
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false,
+      antialias: preferMsaa,
       powerPreference: 'high-performance',
       alpha: false,
     });
     this.renderer.setClearColor(0x121018, 1);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.domElement.className =
       'absolute inset-0 z-[1] block touch-none select-none outline-none';
     this.renderer.domElement.setAttribute('tabindex', '-1');
@@ -234,7 +252,7 @@ export class MotoGame {
     });
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x121018, 78, 340);
+    this.scene.fog = new THREE.Fog(0x121018, 88, 355);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
@@ -275,6 +293,7 @@ export class MotoGame {
       forward: this.ui.btnTouchForward,
       left: this.ui.btnTouchLeft,
       right: this.ui.btnTouchRight,
+      brake: this.ui.btnTouchBrake,
     });
     this.detachMouseAim = attachMouseAim(this.renderer.domElement);
     this.detachPointerDriver = attachPointerDriver(this.renderer.domElement);
@@ -352,6 +371,7 @@ export class MotoGame {
     this.detachTouchPad?.();
     this.detachTouchPad = null;
     this.detachKeyboard?.();
+    this.hidePcControlsHint();
     this.loopAudio.dispose();
     this.driftTrail.dispose();
     this.renderer.dispose();
@@ -399,7 +419,10 @@ export class MotoGame {
     this.updateCameraRigForViewport(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
+    const prCap = coarse ? 2 : 2.25;
+    this.renderer.setPixelRatio(Math.min(dpr, prCap));
     this.renderer.setSize(w, h, true);
   };
 
@@ -641,6 +664,7 @@ export class MotoGame {
     this.wasTouchingPedInZone = false;
     this.vibePortalExitDone = false;
     this.vibePortalBackDone = false;
+    this.hidePcControlsHint();
 
     this.clearSparks();
     this.driftTrail.clear();
@@ -673,6 +697,28 @@ export class MotoGame {
 
   private hidePassengerHud(): void {
     this.ui.passengerHud.classList.add('hidden');
+  }
+
+  /** Aviso PC al primer «Subiendo pasajero…»; solo `md` + puntero fino. */
+  private hidePcControlsHint(): void {
+    if (this.pcControlsHintTimeout !== null) {
+      clearTimeout(this.pcControlsHintTimeout);
+      this.pcControlsHintTimeout = null;
+    }
+    this.ui.pcControlsHint.classList.add('hidden');
+  }
+
+  private showPcControlsHintOnDesktopForInitialBoarding(): void {
+    const isDesktopLike =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(min-width: 768px) and (pointer: fine)').matches;
+    if (!isDesktopLike) return;
+    this.hidePcControlsHint();
+    this.ui.pcControlsHint.classList.remove('hidden');
+    this.pcControlsHintTimeout = window.setTimeout(() => {
+      this.pcControlsHintTimeout = null;
+      this.ui.pcControlsHint.classList.add('hidden');
+    }, 5000);
   }
 
   /** +10 s por contacto (un disparo al entrar en colisión, no cada frame). */
@@ -1083,6 +1129,7 @@ export class MotoGame {
         this.phase = 'boarding';
         this.boardingUntilMs = nowTick + 1600;
         this.showPassengerHud('up', 'Subiendo pasajero…');
+        this.showPcControlsHintOnDesktopForInitialBoarding();
       }
 
       const canDrive = this.phase === 'racing';
@@ -1096,10 +1143,13 @@ export class MotoGame {
           PHYS.steerHigh,
           speedFactor,
         );
-        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, 0.24);
+        const steerInHz = isMouseAimInputActive() ? SMOOTH_STEER_IN_MOUSE_HZ : SMOOTH_STEER_IN_HZ;
+        const steerTAlpha = 1 - Math.exp(-steerInHz * dt);
+        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, Math.min(1, steerTAlpha));
         this.bike.rotation.y -= this.currentSteer * steerStrength * dt;
       } else {
-        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, 0, 0.22);
+        const relAlpha = 1 - Math.exp(-SMOOTH_STEER_RELEASE_HZ * dt);
+        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, 0, Math.min(1, relAlpha));
       }
 
       if (canDrive && input.brake > 0) {
@@ -1110,8 +1160,12 @@ export class MotoGame {
       const throttle = canDrive ? input.throttle : 0;
       if (canDrive) {
         this.speed += throttle * accel * dt;
-        this.speed *= Math.exp(-drag * dt);
+        const rollDrag = throttle > 0 ? drag : drag * COAST_DRAG_MULT;
+        this.speed *= Math.exp(-rollDrag * dt);
         this.speed = THREE.MathUtils.clamp(this.speed, -maxSpeed * 0.15, maxSpeed);
+        if (throttle < 0.01 && Math.abs(this.speed) < COAST_STOP_SPEED_EPS) {
+          this.speed = 0;
+        }
       } else {
         this.speed *= Math.exp(-drag * 2.5 * dt);
         if (Math.abs(this.speed) < 0.04) this.speed = 0;
@@ -1220,9 +1274,11 @@ export class MotoGame {
               ? -Math.sign(yawRate)
               : 0;
         const targetZ = turnSign === 0 ? 0 : -turnSign * 0.12 * driftI;
-        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, targetZ, 0.25);
+        const la = 1 - Math.exp(-SMOOTH_LEAN_HZ * dt);
+        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, targetZ, Math.min(1, la));
       } else {
-        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, 0, 0.22);
+        const l0 = 1 - Math.exp(-SMOOTH_LEAN_RESET_HZ * dt);
+        this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, 0, Math.min(1, l0));
       }
       this.driftTrail.update(dt, isDrift ? driftI : 0, minDr, this.bike);
       this.bikeDriftLastYaw = yawNow;
@@ -1298,7 +1354,8 @@ export class MotoGame {
       .clone()
       .add(back.multiplyScalar(this.cameraBack))
       .add(new THREE.Vector3(0, this.cameraUp, 0));
-    this.camera.position.lerp(desiredCam, 1 - Math.pow(0.001, dt));
+    const camAlpha = 1 - Math.exp(-SMOOTH_CAMERA_FOLLOW_HZ * dt);
+    this.camera.position.lerp(desiredCam, Math.min(1, camAlpha));
     this.camTarget
       .copy(this.bike.position)
       .add(forward.clone().multiplyScalar(this.cameraLook))
