@@ -8,12 +8,17 @@ const keys = new Set<string>();
 
 let pointerDriving = false;
 let pointerSteer = 0;
+/** En multitacto, solo este `pointerId` actualiza giro/acel. del lienzo (evita dedo cruzado). */
+let pointerDrivePointerId: number | null = null;
 
-/** Mando en pantalla: izq. / dcha. (giro), adelante (acelerar), freno; independiente por botón, multitacto. */
-let padLeft = false;
-let padRight = false;
-let padForward = false;
-let padBrake = false;
+const SELECTOR_BLOCK_POINTER_DRIVER =
+  '.mtr-touch-pad,.mtr-menu-overlay,.mtr-finish-overlay,.splash-root';
+
+/** Mando en pantalla: izq. / dcha. (giro), adelante (acelerar), freno; un id por contacto, multitacto. */
+const padLeftIds = new Set<number>();
+const padRightIds = new Set<number>();
+const padForwardIds = new Set<number>();
+const padBrakeIds = new Set<number>();
 
 /** Giro con posición del ratón sobre el lienzo (PC con puntero fino; sin acelerar solo). */
 let mouseAimSteer = 0;
@@ -92,6 +97,30 @@ export function attachKeyboard(): () => void {
   };
 }
 
+/**
+ * Mando/overlay encima del canvas (hit test: Android/Chrome 14+).
+ * `e.target` puede ser el canvas aun haya otra capa; `elementFromPoint` con dedo/pen.
+ */
+function isPointerDriverBlockedByTopLayer(e: PointerEvent, canvas: HTMLElement): boolean {
+  if (e.target !== canvas) {
+    return true;
+  }
+  if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+    const top = document.elementFromPoint(e.clientX, e.clientY);
+    if (!top) {
+      return true;
+    }
+    return (top as Element).closest(SELECTOR_BLOCK_POINTER_DRIVER) != null;
+  }
+  return (canvas as Element).closest(SELECTOR_BLOCK_POINTER_DRIVER) != null;
+}
+
+function clearPointerDriverState(): void {
+  pointerDriving = false;
+  pointerSteer = 0;
+  pointerDrivePointerId = null;
+}
+
 /** Conducción con ratón o dedo: mantén pulsado sobre el juego = acelera; mueve izquierda/derecha = gira. */
 export function attachPointerDriver(el: HTMLElement): () => void {
   const updateSteer = (e: PointerEvent) => {
@@ -103,7 +132,10 @@ export function attachPointerDriver(el: HTMLElement): () => void {
 
   const onDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
+    if (e.target !== el) return;
+    if (isPointerDriverBlockedByTopLayer(e, el)) return;
     pointerDriving = true;
+    pointerDrivePointerId = e.pointerId;
     updateSteer(e);
     try {
       el.setPointerCapture(e.pointerId);
@@ -113,14 +145,13 @@ export function attachPointerDriver(el: HTMLElement): () => void {
   };
 
   const onMove = (e: PointerEvent) => {
-    if (!pointerDriving) return;
+    if (!pointerDriving || e.pointerId !== pointerDrivePointerId) return;
     updateSteer(e);
   };
 
   const end = (e: PointerEvent) => {
-    if (!pointerDriving) return;
-    pointerDriving = false;
-    pointerSteer = 0;
+    if (e.pointerId !== pointerDrivePointerId) return;
+    clearPointerDriverState();
     try {
       el.releasePointerCapture(e.pointerId);
     } catch {
@@ -138,8 +169,7 @@ export function attachPointerDriver(el: HTMLElement): () => void {
   el.addEventListener('contextmenu', onCtx);
 
   return () => {
-    pointerDriving = false;
-    pointerSteer = 0;
+    clearPointerDriverState();
     el.removeEventListener('pointerdown', onDown);
     el.removeEventListener('pointermove', onMove);
     el.removeEventListener('pointerup', end);
@@ -332,10 +362,12 @@ export function pollInput(): InputState {
   const kBrake = readBrakeKeys();
 
   const pSteer = padSteerValue();
+  /** Mando L/R: prioridad sobre giro en lienzo (multitacto Android: gas en canvas + ←/→). */
+  const padSteerActive = Math.abs(pSteer) > 1e-4;
   const ptrSteer = pointerDriving ? pointerSteer : 0;
   const aim = useMouseAim ? mouseAimSteer : 0;
-  const ptr = pointerDriving ? ptrSteer : 0;
-  const aimG = useMouseAim ? aim : 0;
+  const ptr = pointerDriving && !padSteerActive ? ptrSteer : 0;
+  const aimG = useMouseAim && !padSteerActive ? aim : 0;
 
   if (tiltInputOn) {
     let tr = tiltSteerRaw;
@@ -345,8 +377,8 @@ export function pollInput(): InputState {
     tiltFiltered = 0;
   }
 
-  const tiltWeight = pointerDriving ? W_STEER_TILT_WITH_POINTER : W_STEER_TILT;
-  const tForBlend = tiltInputOn ? tiltFiltered : 0;
+  const tiltWeight = pointerDriving && !padSteerActive ? W_STEER_TILT_WITH_POINTER : W_STEER_TILT;
+  const tForBlend = tiltInputOn && !padSteerActive ? tiltFiltered : 0;
 
   const steerWeightedUnclamped =
     kSteer * W_STEER_KEY +
@@ -360,10 +392,14 @@ export function pollInput(): InputState {
     useMouseAim &&
     !pointerDriving &&
     !tiltInputOn &&
+    !padSteerActive &&
     Math.abs(pSteer) < 0.001 &&
     Math.abs(kSteer) < 0.001;
   const onlyPadSteer =
-    !tiltInputOn && !pointerDriving && Math.abs(kSteer) < 0.001 && Math.abs(pSteer) > 1e-4;
+    !tiltInputOn &&
+    Math.abs(kSteer) < 0.001 &&
+    Math.abs(pSteer) > 1e-4 &&
+    (!pointerDriving || padSteerActive);
   const steerCurved = pureMouseSteer
     ? steerWeighted
     : onlyPadSteer
@@ -371,9 +407,11 @@ export function pollInput(): InputState {
       : applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
   const steer = Math.max(-1, Math.min(1, steerCurved));
 
-  const pThrottle = padBrake ? 0 : (padForward ? 1 : 0);
+  const forwardPad = padForwardIds.size > 0;
+  const brakePad = padBrakeIds.size > 0;
+  const pThrottle = brakePad ? 0 : (forwardPad ? 1 : 0);
   const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0);
-  const brake = Math.max(kBrake, padBrake ? 1 : 0);
+  const brake = Math.max(kBrake, brakePad ? 1 : 0);
 
   return {
     throttle,
@@ -384,14 +422,49 @@ export function pollInput(): InputState {
 
 function padSteerValue(): number {
   let s = 0;
-  if (padLeft) s -= 1;
-  if (padRight) s += 1;
+  if (padLeftIds.size > 0) s -= 1;
+  if (padRightIds.size > 0) s += 1;
   return Math.max(-1, Math.min(1, s));
 }
 
+const passiveFalse = { passive: false } as const;
+
+let globalPointerPadGuardsInstalled = false;
+
 /**
- * Mando táctil: izquierda, derecha, adelante, freno. Cada botón usa su propia captura de puntero
- * (multitacto: ambas manos a la vez). Si freno y adelante están pulsados, el freno gana al gas del mando.
+ * Refuerza suelta de contactos: `pointerup`/`pointercancel` en ventana, blur, pestaña oculta.
+ */
+function ensureGlobalPointerPadGuards(): void {
+  if (globalPointerPadGuardsInstalled || typeof window === 'undefined') {
+    return;
+  }
+  globalPointerPadGuardsInstalled = true;
+  const dropId = (e: PointerEvent) => {
+    padForwardIds.delete(e.pointerId);
+    padLeftIds.delete(e.pointerId);
+    padRightIds.delete(e.pointerId);
+    padBrakeIds.delete(e.pointerId);
+  };
+  window.addEventListener('pointerup', dropId);
+  window.addEventListener('pointercancel', dropId);
+  const flushOnHide = () => {
+    padForwardIds.clear();
+    padLeftIds.clear();
+    padRightIds.clear();
+    padBrakeIds.clear();
+    clearPointerDriverState();
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      flushOnHide();
+    }
+  });
+  window.addEventListener('blur', flushOnHide);
+}
+
+/**
+ * Mando táctil: izquierda, derecha, adelante, freno. Un `pointerId` por contacto, multitacto.
+ * `preventDefault` requiere listener no pasivo. `stopPropagation` evita colisión con lógica del padre.
  */
 export function attachTouchPad(els: {
   forward: HTMLElement;
@@ -399,128 +472,109 @@ export function attachTouchPad(els: {
   right: HTMLElement;
   brake: HTMLElement;
 }): () => void {
-  const downF = (e: PointerEvent) => {
-    if (e.button !== 0) return;
+  ensureGlobalPointerPadGuards();
+
+  const captureAndAdd = (target: HTMLElement, set: Set<number>, e: PointerEvent) => {
+    if (e.button !== 0) {
+      return;
+    }
+    e.stopPropagation();
     e.preventDefault();
     try {
-      els.forward.setPointerCapture(e.pointerId);
+      target.setPointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
-    padForward = true;
+    set.add(e.pointerId);
   };
-  const upF = (e: PointerEvent) => {
-    padForward = false;
+
+  const releaseF = (e: PointerEvent) => {
+    padForwardIds.delete(e.pointerId);
     try {
       els.forward.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
   };
-  const downL = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    try {
-      els.left.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    padLeft = true;
-  };
-  const upL = (e: PointerEvent) => {
-    padLeft = false;
+  const releaseL = (e: PointerEvent) => {
+    padLeftIds.delete(e.pointerId);
     try {
       els.left.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
   };
-  const downR = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    try {
-      els.right.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    padRight = true;
-  };
-  const upR = (e: PointerEvent) => {
-    padRight = false;
+  const releaseR = (e: PointerEvent) => {
+    padRightIds.delete(e.pointerId);
     try {
       els.right.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
   };
-  const loseF = () => {
-    padForward = false;
-  };
-  const loseL = () => {
-    padLeft = false;
-  };
-  const loseR = () => {
-    padRight = false;
-  };
-  const downB = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    try {
-      els.brake.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    padBrake = true;
-  };
-  const upB = (e: PointerEvent) => {
-    padBrake = false;
+  const releaseB = (e: PointerEvent) => {
+    padBrakeIds.delete(e.pointerId);
     try {
       els.brake.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
   };
-  const loseB = () => {
-    padBrake = false;
+  const loseF = (e: PointerEvent) => {
+    padForwardIds.delete(e.pointerId);
+  };
+  const loseL = (e: PointerEvent) => {
+    padLeftIds.delete(e.pointerId);
+  };
+  const loseR = (e: PointerEvent) => {
+    padRightIds.delete(e.pointerId);
+  };
+  const loseB = (e: PointerEvent) => {
+    padBrakeIds.delete(e.pointerId);
   };
 
-  els.forward.addEventListener('pointerdown', downF);
-  els.forward.addEventListener('pointerup', upF);
-  els.forward.addEventListener('pointercancel', upF);
+  const downF = (e: PointerEvent) => captureAndAdd(els.forward, padForwardIds, e);
+  const downL = (e: PointerEvent) => captureAndAdd(els.left, padLeftIds, e);
+  const downR = (e: PointerEvent) => captureAndAdd(els.right, padRightIds, e);
+  const downB = (e: PointerEvent) => captureAndAdd(els.brake, padBrakeIds, e);
+
+  els.forward.addEventListener('pointerdown', downF, passiveFalse);
+  els.forward.addEventListener('pointerup', releaseF);
+  els.forward.addEventListener('pointercancel', releaseF);
   els.forward.addEventListener('lostpointercapture', loseF);
-  els.left.addEventListener('pointerdown', downL);
-  els.left.addEventListener('pointerup', upL);
-  els.left.addEventListener('pointercancel', upL);
+  els.left.addEventListener('pointerdown', downL, passiveFalse);
+  els.left.addEventListener('pointerup', releaseL);
+  els.left.addEventListener('pointercancel', releaseL);
   els.left.addEventListener('lostpointercapture', loseL);
-  els.right.addEventListener('pointerdown', downR);
-  els.right.addEventListener('pointerup', upR);
-  els.right.addEventListener('pointercancel', upR);
+  els.right.addEventListener('pointerdown', downR, passiveFalse);
+  els.right.addEventListener('pointerup', releaseR);
+  els.right.addEventListener('pointercancel', releaseR);
   els.right.addEventListener('lostpointercapture', loseR);
-  els.brake.addEventListener('pointerdown', downB);
-  els.brake.addEventListener('pointerup', upB);
-  els.brake.addEventListener('pointercancel', upB);
+  els.brake.addEventListener('pointerdown', downB, passiveFalse);
+  els.brake.addEventListener('pointerup', releaseB);
+  els.brake.addEventListener('pointercancel', releaseB);
   els.brake.addEventListener('lostpointercapture', loseB);
 
   return () => {
-    padLeft = false;
-    padRight = false;
-    padForward = false;
-    padBrake = false;
+    padForwardIds.clear();
+    padLeftIds.clear();
+    padRightIds.clear();
+    padBrakeIds.clear();
     els.forward.removeEventListener('pointerdown', downF);
-    els.forward.removeEventListener('pointerup', upF);
-    els.forward.removeEventListener('pointercancel', upF);
+    els.forward.removeEventListener('pointerup', releaseF);
+    els.forward.removeEventListener('pointercancel', releaseF);
     els.forward.removeEventListener('lostpointercapture', loseF);
     els.left.removeEventListener('pointerdown', downL);
-    els.left.removeEventListener('pointerup', upL);
-    els.left.removeEventListener('pointercancel', upL);
+    els.left.removeEventListener('pointerup', releaseL);
+    els.left.removeEventListener('pointercancel', releaseL);
     els.left.removeEventListener('lostpointercapture', loseL);
     els.right.removeEventListener('pointerdown', downR);
-    els.right.removeEventListener('pointerup', upR);
-    els.right.removeEventListener('pointercancel', upR);
+    els.right.removeEventListener('pointerup', releaseR);
+    els.right.removeEventListener('pointercancel', releaseR);
     els.right.removeEventListener('lostpointercapture', loseR);
     els.brake.removeEventListener('pointerdown', downB);
-    els.brake.removeEventListener('pointerup', upB);
-    els.brake.removeEventListener('pointercancel', upB);
+    els.brake.removeEventListener('pointerup', releaseB);
+    els.brake.removeEventListener('pointercancel', releaseB);
     els.brake.removeEventListener('lostpointercapture', loseB);
   };
 }

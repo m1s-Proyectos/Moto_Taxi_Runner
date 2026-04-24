@@ -214,7 +214,13 @@ export function addRoadCenterDashes(
   const dashLen = options?.dashLen ?? 1.5;
   const dashW = options?.dashW ?? 0.4;
   const c = getRoadCenterline();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xd7e2ff, roughness: 1, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xfffcf0,
+    roughness: 0.45,
+    metalness: 0,
+    emissive: 0xfff4d8,
+    emissiveIntensity: 0.9,
+  });
   const tvec = new THREE.Vector3();
   const p = new THREE.Vector3();
   for (let t = 0.01; t < 0.99; t += tStep) {

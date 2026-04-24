@@ -81,6 +81,8 @@ function addThreeWheels(g: THREE.Group, tireHex: number, rimHex: number): void {
       color: tireHex,
       roughness: tireRough,
       metalness: 0.02,
+      emissive: 0x0a0c10,
+      emissiveIntensity: 0.08,
     });
     const tire = new THREE.Mesh(
       new THREE.CylinderGeometry(WR, WR, TIRE_W, 28),
@@ -94,6 +96,8 @@ function addThreeWheels(g: THREE.Group, tireHex: number, rimHex: number): void {
       color: rimHex,
       roughness: rimRough,
       metalness: rimMetal,
+      emissive: 0x6a6f78,
+      emissiveIntensity: 0.12,
     });
     const rim = new THREE.Mesh(
       new THREE.CylinderGeometry(WR * 0.5, WR * 0.5, TIRE_W + 0.04, 20),
@@ -112,13 +116,15 @@ function glassMat(tint: number, transmission: number): THREE.MeshPhysicalMateria
   return new THREE.MeshPhysicalMaterial({
     color: tint,
     metalness: 0,
-    roughness: 0.06,
+    roughness: 0.07,
     transmission,
     thickness: 0.45,
     transparent: true,
     opacity: 1,
     ior: 1.48,
     side: THREE.DoubleSide,
+    emissive: 0x0a1018,
+    emissiveIntensity: 0.06,
   });
 }
 
@@ -127,29 +133,39 @@ function createClassicModel(): THREE.Group {
   const g = new THREE.Group();
 
   const paintWhite = new THREE.MeshStandardMaterial({
-    color: 0xfdfdfd,
-    roughness: 0.22,
+    color: 0xfafafa,
+    roughness: 0.2,
     metalness: 0.38,
+    emissive: 0xd8d8e6,
+    emissiveIntensity: 0.12,
   });
   const canvasBlack = new THREE.MeshStandardMaterial({
-    color: 0x141414,
-    roughness: 0.9,
-    metalness: 0.02,
+    color: 0x1a1a1c,
+    roughness: 0.86,
+    metalness: 0.04,
+    emissive: 0x1e2228,
+    emissiveIntensity: 0.12,
   });
   const plasticBlack = new THREE.MeshStandardMaterial({
-    color: 0x0c0c0c,
-    roughness: 0.68,
-    metalness: 0.08,
+    color: 0x121214,
+    roughness: 0.64,
+    metalness: 0.1,
+    emissive: 0x181c22,
+    emissiveIntensity: 0.1,
   });
   const seatMat = new THREE.MeshStandardMaterial({
     color: 0x3d2c25,
-    roughness: 0.82,
+    roughness: 0.78,
     metalness: 0.05,
+    emissive: 0x1f1612,
+    emissiveIntensity: 0.08,
   });
   const chrome = new THREE.MeshStandardMaterial({
-    color: 0xd8dee6,
-    roughness: 0.28,
-    metalness: 0.72,
+    color: 0xe4eaf2,
+    roughness: 0.24,
+    metalness: 0.74,
+    emissive: 0x7a8a9e,
+    emissiveIntensity: 0.2,
   });
 
   g.add(rb(1.08, 0.26, 1.9, 0.1, paintWhite, 0, 0.39, 0.05));
@@ -207,11 +223,11 @@ function createClassicModel(): THREE.Group {
   g.add(rb(0.86, 0.34, 0.2, 0.045, plasticBlack, 0, 0.62, -1.03));
 
   const hlMat = new THREE.MeshStandardMaterial({
-    color: 0xfffff0,
-    emissive: 0x66552a,
-    emissiveIntensity: 0.35,
-    roughness: 0.14,
-    metalness: 0.35,
+    color: 0xfffff8,
+    emissive: 0xfff4d0,
+    emissiveIntensity: 0.7,
+    roughness: 0.1,
+    metalness: 0.4,
   });
   const hlL = new THREE.Mesh(new THREE.SphereGeometry(0.078, 16, 12), hlMat);
   hlL.position.set(-0.25, 0.61, -1.08);
@@ -221,10 +237,10 @@ function createClassicModel(): THREE.Group {
   g.add(hlR);
 
   const amber = new THREE.MeshStandardMaterial({
-    color: 0xff9500,
-    emissive: 0x663300,
-    emissiveIntensity: 0.25,
-    roughness: 0.42,
+    color: 0xff9a12,
+    emissive: 0x884400,
+    emissiveIntensity: 0.4,
+    roughness: 0.4,
     metalness: 0,
   });
   g.add(rb(0.2, 0.05, 0.07, 0.018, amber, -0.48, 0.7, -0.52));
@@ -254,9 +270,11 @@ function createClassicModel(): THREE.Group {
   g.add(roofArch);
 
   const cageMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2a2a,
-    roughness: 0.55,
-    metalness: 0.45,
+    color: 0x33363c,
+    roughness: 0.5,
+    metalness: 0.48,
+    emissive: 0x1c2028,
+    emissiveIntensity: 0.1,
   });
   for (const sx of [-1, 1] as const) {
     for (const sz of [-0.32, 0.38] as const) {
@@ -283,19 +301,25 @@ function createUrbanModel(): THREE.Group {
   const g = new THREE.Group();
 
   const whitePaint = new THREE.MeshStandardMaterial({
-    color: 0xfafafa,
-    roughness: 0.18,
+    color: 0xf5f5f5,
+    roughness: 0.16,
     metalness: 0.42,
+    emissive: 0xd8dce4,
+    emissiveIntensity: 0.12,
   });
   const redPaint = new THREE.MeshStandardMaterial({
-    color: 0xd92323,
-    roughness: 0.2,
+    color: 0xe03030,
+    roughness: 0.18,
     metalness: 0.32,
+    emissive: 0x501010,
+    emissiveIntensity: 0.1,
   });
   const blackMatte = new THREE.MeshStandardMaterial({
-    color: 0x101010,
-    roughness: 0.82,
-    metalness: 0.04,
+    color: 0x18181a,
+    roughness: 0.78,
+    metalness: 0.06,
+    emissive: 0x1c1e24,
+    emissiveIntensity: 0.12,
   });
 
   g.add(rb(1.06, 0.055, 1.92, 0.025, blackMatte, 0, 0.265, 0.05));
@@ -316,11 +340,11 @@ function createUrbanModel(): THREE.Group {
   g.add(rb(0.69, 0.3, 0.24, 0.065, blackMatte, 0, 0.56, -1.04));
 
   const hlMat = new THREE.MeshStandardMaterial({
-    color: 0xfffff5,
-    emissive: 0x888855,
-    emissiveIntensity: 0.45,
-    roughness: 0.1,
-    metalness: 0.4,
+    color: 0xfffff8,
+    emissive: 0xfff5d5,
+    emissiveIntensity: 0.8,
+    roughness: 0.08,
+    metalness: 0.42,
   });
   const hlL = new THREE.Mesh(new THREE.SphereGeometry(0.076, 18, 14), hlMat);
   hlL.position.set(-0.19, 0.56, -1.12);
@@ -330,10 +354,10 @@ function createUrbanModel(): THREE.Group {
   g.add(hlR);
 
   const amber = new THREE.MeshStandardMaterial({
-    color: 0xff8c1a,
-    emissive: 0x552200,
-    emissiveIntensity: 0.3,
-    roughness: 0.38,
+    color: 0xff911a,
+    emissive: 0x772200,
+    emissiveIntensity: 0.45,
+    roughness: 0.35,
     metalness: 0,
   });
   g.add(rb(0.17, 0.045, 0.055, 0.015, amber, -0.36, 0.72, -0.9));
@@ -364,9 +388,11 @@ function createUrbanModel(): THREE.Group {
       0.025,
       0.03,
       new THREE.MeshStandardMaterial({
-        color: 0xea580c,
+        color: 0xef6010,
         roughness: 0.45,
         metalness: 0.08,
+        emissive: 0x3a1808,
+        emissiveIntensity: 0.12,
       }),
       0.44,
       0.64,
@@ -384,10 +410,10 @@ function createUrbanModel(): THREE.Group {
   }
 
   const tail = new THREE.MeshStandardMaterial({
-    color: 0xb91c1c,
-    emissive: 0x551010,
-    emissiveIntensity: 0.15,
-    roughness: 0.35,
+    color: 0xc82020,
+    emissive: 0x6a1010,
+    emissiveIntensity: 0.35,
+    roughness: 0.32,
     metalness: 0.2,
   });
   g.add(rb(0.12, 0.06, 0.08, 0.02, tail, -0.46, 0.62, 1.02));

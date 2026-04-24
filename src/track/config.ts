@@ -116,10 +116,11 @@ export const SPAWN = {
 
 /** Curva de dificultad / sensación de conducción (Fase 2). */
 export const PHYS = {
-  maxSpeed: 28.5,
-  accel: 44,
-  brake: 50,
-  drag: 1.22,
+  /** ~126 km/h pico: sensación más viva en PC. */
+  maxSpeed: 35,
+  accel: 56,
+  brake: 58,
+  drag: 1.04,
   /** Fricción extra al salirse de calzada (acumulativa con `drag` en césped/arcén). */
   offRoadExtraDrag: 1.9,
   steerLow: 1.15,

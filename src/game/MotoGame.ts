@@ -77,6 +77,7 @@ import {
 import { createParkedCar } from './parkedCar';
 import { addCityscape } from './worldDecor';
 import { getUseMobileGameUi } from '../lib/deviceInputProfile';
+import { createNightSky, type NightSky } from './nightSky';
 import { ensureLocalFreeProfile, recordFreeModePersonalBestIfBetter } from '../lib/localFreeProfile';
 import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
 import { DriftTrail } from './driftTrail';
@@ -84,6 +85,12 @@ import { createDefaultTurboPickups, updateTurboPickupFloat, type TurboPickupInst
 import { addTrafficLightsToScene, isInActiveGreenCorridor } from './trafficLights';
 
 type RacePhase = 'ready' | 'boarding' | 'exchange' | 'racing' | 'done';
+
+/**
+ * Tope de Δt por frame (s): solo para picos (cambio de pestaña). Un cap bajo p. ej. 0.05s
+ * descartaba tiempo real cuando el frame tardaba >50 ms → acel. más lenta en PC con carga de GPU.
+ */
+const MAX_SIM_STEP_SEC = 0.2;
 
 function fmtTime(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) ms = 0;
@@ -160,6 +167,7 @@ export class MotoGame {
   private tiltInputAbort: AbortController | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private raf = 0;
+  private nightSky: NightSky | null = null;
 
   private sessionStarted = false;
   private phase: RacePhase = 'ready';
@@ -229,7 +237,7 @@ export class MotoGame {
     this.renderer.setClearColor(0x121018, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.domElement.className =
       'absolute inset-0 z-[1] block touch-none select-none outline-none';
     this.renderer.domElement.setAttribute('tabindex', '-1');
@@ -255,20 +263,28 @@ export class MotoGame {
     });
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x121018, 88, 355);
+    this.scene.fog = new THREE.Fog(0x121018, 80, 360);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
 
-    const ambient = new THREE.AmbientLight(0xffe8d8, 0.42);
+    const ambient = new THREE.AmbientLight(0x3d3e48, 0.36);
     this.scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0xc7d2fe, 0x3d2f28, 0.35);
+    const hemi = new THREE.HemisphereLight(0x1c2648, 0x10121a, 0.48);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff5e6, 0.82);
-    sun.position.set(10, 18, 6);
-    this.scene.add(sun);
+    const moonLight = new THREE.DirectionalLight(0xaab8d8, 0.45);
+    moonLight.position.set(-40, 55, 20);
+    this.scene.add(moonLight);
+    const street = new THREE.DirectionalLight(0xffe0c4, 0.34);
+    street.position.set(2, 14, 8);
+    this.scene.add(street);
+    const roadFill = new THREE.DirectionalLight(0x8a9ab8, 0.12);
+    roadFill.position.set(0, 1, 0);
+    this.scene.add(roadFill);
 
     this.buildWorld();
+    this.nightSky = createNightSky();
+    this.scene.add(this.nightSky.group);
     this.driftTrail = new DriftTrail(this.scene, { maxPoints: 48 });
     this.bikeDriftLastYaw = SPAWN.rotationY;
     this.scene.add(this.bike);
@@ -377,6 +393,8 @@ export class MotoGame {
     this.hidePcControlsHint();
     this.loopAudio.dispose();
     this.driftTrail.dispose();
+    this.nightSky?.dispose();
+    this.nightSky = null;
     this.renderer.dispose();
     this.container.replaceChildren();
   }
@@ -422,10 +440,9 @@ export class MotoGame {
     this.updateCameraRigForViewport(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
-    const prCap = coarse ? 2 : 2.25;
-    this.renderer.setPixelRatio(Math.min(dpr, prCap));
+    /** Tope 2: antes solo PC bajaba a 1.65 (pixelación en pantallas grandes / HiDPI). */
+    this.renderer.setPixelRatio(Math.min(dpr, 2));
     this.renderer.setSize(w, h, true);
   };
 
@@ -456,17 +473,41 @@ export class MotoGame {
     /** Abarca salida z≈+4 y final de ruta z≈-320 con margen. */
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(720, 720, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 1, metalness: 0 }),
+      new THREE.MeshStandardMaterial({
+        color: 0x1c1724,
+        roughness: 0.98,
+        metalness: 0,
+        emissive: 0x0e0c12,
+        emissiveIntensity: 0.06,
+      }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = WORLD_FLOOR_Y;
     this.scene.add(ground);
 
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x2f3548, roughness: 0.96, metalness: 0.02 });
+    const roadMat = new THREE.MeshStandardMaterial({
+      color: 0x444d64,
+      roughness: 0.84,
+      metalness: 0.05,
+      emissive: 0x1c283c,
+      emissiveIntensity: 0.32,
+    });
     const roadGeo = buildRoadRibbonGeometry(ROAD_HALF_WIDTH, 0.01, 256);
     const road = new THREE.Mesh(roadGeo, roadMat);
     road.receiveShadow = true;
     this.scene.add(road);
+
+    const curve = getRoadCenterline();
+    const spillP = new THREE.Vector3();
+    const nSpill = 12;
+    for (let i = 0; i < nSpill; i++) {
+      const t = 0.035 + (i / Math.max(1, nSpill - 1)) * 0.93;
+      curve.getPointAt(t, spillP);
+      const spill = new THREE.PointLight(0xffd5b0, 1.15, 54, 2);
+      spill.position.set(spillP.x, 5.2, spillP.z);
+      this.scene.add(spill);
+    }
+
     addRoadCenterDashes(this.scene, 0.022, { tStep: 0.03, dashLen: 1.4, dashW: 0.36 });
 
     addCityscape(this.scene);
@@ -964,7 +1005,7 @@ export class MotoGame {
     this.syncRoutePill();
 
     const maxSpeed = this.getEffectiveMaxSpeed();
-    const kph = Math.round(this.speed * 18);
+    const kph = Math.round(this.speed * 3.6);
     this.ui.speedValue.textContent = `${kph}`;
     const pct = Math.min(100, Math.max(0, Math.round((Math.abs(this.speed) / maxSpeed) * 100)));
     this.ui.speedBar.style.width = `${pct}%`;
@@ -1085,7 +1126,7 @@ export class MotoGame {
   private tick(): void {
     this.raf = window.requestAnimationFrame(() => this.tick());
 
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const dt = Math.min(MAX_SIM_STEP_SEC, this.clock.getDelta());
     const tSec = performance.now() * 0.001;
     for (let i = 0; i < this.obstacleCarGroups.length; i++) {
       this.syncObstacleTransform(i, tSec);
@@ -1194,9 +1235,9 @@ export class MotoGame {
       }
 
       if (canDrive) {
+        // Solo desplazamiento hacia adelante en local: el arco del giro lo da yaw + translateZ
+        // (el antiguo empuje en X con sin(yaw) sumaba derrape lateral falso y poco controlable al girar)
         this.bike.translateZ(-this.speed * dt);
-        // pequeño deslizamiento lateral para que el giro se sienta real
-        this.bike.position.x += Math.sin(this.bike.rotation.y) * this.speed * 0.02;
       }
 
       let x = this.bike.position.x;
@@ -1384,6 +1425,7 @@ export class MotoGame {
       .add(new THREE.Vector3(0, 1.1, 0));
     this.camera.lookAt(this.camTarget);
 
+    this.nightSky?.update(this.camera);
     this.renderer.render(this.scene, this.camera);
   }
 }

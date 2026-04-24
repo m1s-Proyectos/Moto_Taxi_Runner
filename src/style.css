@@ -203,6 +203,8 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
 /* Mando táctil: solo interactivo cuando el HUD de carrera está visible */
 .mtr-hud-on .mtr-touch-pad {
   pointer-events: auto;
+  /* En Android 12+ evita que el gestor/scroll se coma el toque; el HUD ya es fijo. */
+  touch-action: none;
 }
 
 /* Mando móvil: L/R a la izquierda; gas y freno a la derecha; Giro encima; multitacto. */
