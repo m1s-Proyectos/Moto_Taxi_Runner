@@ -41,6 +41,7 @@ export function resolveCircleObstacle(
     dx /= len;
     dz /= len;
   }
-  const push = radius + 0.05;
+  // Increased push distance for stronger collision response
+  const push = radius + 0.3;
   return { x: cx + dx * push, z: cz + dz * push, hit: true };
 }

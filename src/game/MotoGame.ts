@@ -1253,7 +1253,9 @@ export class MotoGame {
             if (res.hit) {
               x = res.x;
               z = res.z;
-              this.speed *= 0.25;
+              this.speed *= 0.15;
+              // Force position update immediately
+              this.bike.position.set(x, this.bike.position.y, z);
             }
           }
         }
@@ -1277,7 +1279,9 @@ export class MotoGame {
               if (inPedZone) touchingPedInZone = true;
               x = px + (dx / dist) * rr;
               z = pz + (dz / dist) * rr;
-              this.speed *= 0.25;
+              this.speed *= 0.15;
+              // Force position update immediately
+              this.bike.position.set(x, this.bike.position.y, z);
             }
           }
         }
@@ -1290,6 +1294,14 @@ export class MotoGame {
         const off = getOffroadSeverity(lat);
         if (off > 0) {
           this.speed *= Math.exp(-PHYS.offRoadExtraDrag * off * dt);
+        }
+        
+        // Building collision check - prevent going through buildings
+        if (Math.abs(x) > 11) {
+          // Force vehicle back onto road
+          x = Math.sign(x) * 10.5;
+          this.speed *= 0.1;
+          this.bike.position.set(x, this.bike.position.y, z);
         }
 
         const pickR = TURBO.pickupRadius + PLAYER_RADIUS * 0.88;

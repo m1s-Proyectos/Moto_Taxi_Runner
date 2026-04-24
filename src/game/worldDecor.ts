@@ -364,17 +364,28 @@ function addBuildingCollisionBarriers(root: THREE.Object3D, zStart: number, zEnd
     metalness: 0,
   });
   
-  // Left side barriers
-  const leftBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  // Left side barriers - closer to road
+  const leftBarrierGeo = new THREE.BoxGeometry(1.5, 6, zEnd - zStart);
   const leftBarrier = new THREE.Mesh(leftBarrierGeo, barrierMat);
-  leftBarrier.position.set(-15, 4, (zStart + zEnd) / 2);
+  leftBarrier.position.set(-11.5, 3, (zStart + zEnd) / 2);
   root.add(leftBarrier);
   
-  // Right side barriers
-  const rightBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  // Right side barriers - closer to road
+  const rightBarrierGeo = new THREE.BoxGeometry(1.5, 6, zEnd - zStart);
   const rightBarrier = new THREE.Mesh(rightBarrierGeo, barrierMat);
-  rightBarrier.position.set(15, 4, (zStart + zEnd) / 2);
+  rightBarrier.position.set(11.5, 3, (zStart + zEnd) / 2);
   root.add(rightBarrier);
+  
+  // Additional outer barriers
+  const outerLeftBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  const outerLeftBarrier = new THREE.Mesh(outerLeftBarrierGeo, barrierMat);
+  outerLeftBarrier.position.set(-16, 4, (zStart + zEnd) / 2);
+  root.add(outerLeftBarrier);
+  
+  const outerRightBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  const outerRightBarrier = new THREE.Mesh(outerRightBarrierGeo, barrierMat);
+  outerRightBarrier.position.set(16, 4, (zStart + zEnd) / 2);
+  root.add(outerRightBarrier);
 }
 
 export function addCityscape(scene: THREE.Scene): void {
