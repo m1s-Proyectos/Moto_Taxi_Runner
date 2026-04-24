@@ -14,6 +14,19 @@ let padLeft = false;
 let padRight = false;
 let padForward = false;
 
+/** Giro con posición del ratón sobre el lienzo (PC con puntero fino; sin acelerar solo). */
+let mouseAimSteer = 0;
+let useMouseAim = false;
+
+/** Inclinación del dispositivo: giro + adelantar/retroceder (móvil; requiere activar y permisos en iOS). */
+let tiltInputOn = false;
+let tiltRefBeta: number | null = null;
+let tiltSteer = 0;
+let tiltThrottle = 0;
+let tiltBrake = 0;
+let tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null;
+let tiltHandlerAttached = false;
+
 function readSteerKeys(): number {
   let s = 0;
   if (keys.has('a') || keys.has('arrowleft')) s -= 1;
@@ -102,6 +115,125 @@ export function attachPointerDriver(el: HTMLElement): () => void {
   };
 }
 
+function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
+  if (!tiltInputOn) {
+    tiltSteer = 0;
+    tiltThrottle = 0;
+    tiltBrake = 0;
+    return;
+  }
+  const b = e.beta;
+  const g = e.gamma;
+  if (b == null && g == null) return;
+
+  if (b != null) {
+    if (tiltRefBeta === null) tiltRefBeta = b;
+    const db = b - tiltRefBeta;
+    const backDeg = 6;
+    if (db > backDeg) {
+      tiltBrake = Math.min(1, (db - backDeg) / 22);
+      tiltThrottle = 0;
+    } else {
+      tiltBrake = 0;
+      tiltThrottle = 1;
+    }
+  } else {
+    tiltBrake = 0;
+    /** Sin beta: solo eje de giro (poco habitual); mantiene avance. */
+    tiltThrottle = g != null ? 1 : 0;
+  }
+
+  if (g != null) {
+    const landscape = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+    const s = (landscape ? -g : g) / 38;
+    tiltSteer = Math.max(-1, Math.min(1, s));
+  } else {
+    tiltSteer = 0;
+  }
+}
+
+function ensureTiltListener(): void {
+  if (tiltHandlerAttached) return;
+  tiltHandler = (e) => updateTiltFromOrientation(e);
+  window.addEventListener('deviceorientation', tiltHandler, { passive: true } as AddEventListenerOptions);
+  tiltHandlerAttached = true;
+}
+
+/** Inclina el dispositivo: activa el listener; en iOS 13+ hay que pedir permiso antes. */
+export function setTiltInputOn(on: boolean): void {
+  tiltInputOn = on;
+  if (on) {
+    ensureTiltListener();
+  } else {
+    tiltSteer = 0;
+    tiltThrottle = 0;
+    tiltBrake = 0;
+  }
+}
+
+export function setTiltRecalibrationPending(): void {
+  tiltRefBeta = null;
+}
+
+/**
+ * Móviles Safari: el usuario debe conceder el permiso (gesto del usuario, p. ej. toque en el botón).
+ */
+export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
+  const D = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
+  if (typeof D.requestPermission === 'function') {
+    const r = await D.requestPermission();
+    return r === 'granted';
+  }
+  return true;
+}
+
+export function disposeTiltListener(): void {
+  if (tiltHandler && tiltHandlerAttached) {
+    window.removeEventListener('deviceorientation', tiltHandler);
+  }
+  tiltHandler = null;
+  tiltHandlerAttached = false;
+  setTiltInputOn(false);
+  tiltRefBeta = null;
+}
+
+/**
+ * Raton sobre el lienzo: posición X → giro (puntero fino: PC). S/A/D se suman; acelerar sigue con W o clic.
+ */
+export function attachMouseAim(el: HTMLElement): () => void {
+  const can = (): boolean =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  const onMove = (e: MouseEvent) => {
+    if (!can()) return;
+    const r = el.getBoundingClientRect();
+    if (r.width < 8) return;
+    const nx = (e.clientX - r.left) / r.width;
+    mouseAimSteer = Math.max(-1, Math.min(1, (nx - 0.5) * 2.4));
+    useMouseAim = true;
+  };
+  const onEnter = () => {
+    if (can()) useMouseAim = true;
+  };
+  const onLeave = () => {
+    useMouseAim = false;
+    mouseAimSteer = 0;
+  };
+
+  el.addEventListener('mousemove', onMove);
+  el.addEventListener('mouseenter', onEnter);
+  el.addEventListener('mouseleave', onLeave);
+
+  return () => {
+    useMouseAim = false;
+    mouseAimSteer = 0;
+    el.removeEventListener('mousemove', onMove);
+    el.removeEventListener('mouseenter', onEnter);
+    el.removeEventListener('mouseleave', onLeave);
+  };
+}
+
 export function pollInput(): InputState {
   const kSteer = readSteerKeys();
   const kThrottle = readThrottleKeys();
@@ -109,13 +241,16 @@ export function pollInput(): InputState {
 
   const pSteer = padSteerValue();
   const pThrottle = padForward ? 1 : 0;
-  const steerExtra = pointerDriving ? pointerSteer : 0;
-  const steer = Math.max(-1, Math.min(1, kSteer + pSteer + steerExtra));
-  const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0);
+  const ptrSteer = pointerDriving ? pointerSteer : 0;
+  const aim = useMouseAim ? mouseAimSteer : 0;
+  const tS = tiltInputOn ? tiltSteer : 0;
+  const steer = Math.max(-1, Math.min(1, kSteer + pSteer + ptrSteer + aim + tS));
+  const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0, tiltInputOn ? tiltThrottle : 0);
+  const brake = Math.max(kBrake, tiltInputOn ? tiltBrake : 0);
 
   return {
     throttle,
-    brake: kBrake,
+    brake,
     steer,
   };
 }

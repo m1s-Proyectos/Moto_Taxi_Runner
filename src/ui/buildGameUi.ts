@@ -24,6 +24,8 @@ export type GameUiRefs = {
   btnTouchLeft: HTMLButtonElement;
   btnTouchForward: HTMLButtonElement;
   btnTouchRight: HTMLButtonElement;
+  /** Móvil: giro/adelante/frenar vía giroscopio (incl.); permiso en iOS al activar. */
+  btnTilt: HTMLButtonElement;
   pingBadge: HTMLElement;
   menuOverlay: HTMLElement;
   toggleSlider: HTMLElement;
@@ -314,10 +316,19 @@ export function buildGameUi(
   btnTouchRight.className = btnTouchLeft.className;
   btnTouchRight.innerHTML = arrowRight;
 
+  const btnTilt = document.createElement('button');
+  btnTilt.type = 'button';
+  btnTilt.dataset.role = 'tilt';
+  btnTilt.setAttribute('aria-pressed', 'false');
+  btnTilt.setAttribute('aria-label', 'Inclinación: giro, avance recto, inclinar atrás para frenar');
+  btnTilt.className =
+    'mtr-touch-tilt pointer-events-auto shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors';
+  btnTilt.textContent = 'Incl. off';
+
   const touchRow = document.createElement('div');
   touchRow.className =
-    'mx-auto flex w-full max-w-[min(100vw,20rem)] items-end justify-center gap-2 px-2 sm:max-w-sm sm:gap-3 sm:px-3';
-  touchRow.append(btnTouchLeft, btnTouchForward, btnTouchRight);
+    'mx-auto flex w-full max-w-[min(100vw,20rem)] items-end justify-center gap-1.5 px-2 sm:max-w-sm sm:gap-2 sm:px-3';
+  touchRow.append(btnTilt, btnTouchLeft, btnTouchForward, btnTouchRight);
 
   const touchDetails = document.createElement('details');
   touchDetails.className = 'mx-auto mt-0.5 w-full max-w-sm px-3 text-center';
@@ -329,7 +340,7 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Avanza con la flecha central. Las laterales giran hacia la izquierda o derecha respecto al frente de la moto. Puedes pulsar a la vez: adelante y un lado para trazar curvas. Freno: no hay botón; suelta el acelerador; en teclado S/flecha abajo.';
+    'Avanza con la flecha central. Las laterales giran. Activa Incl. para giro/adelantar y frenar con la posición del teléfono (pide permiso en iPhone). Doble toque en Incl. = nueva calibración de «recto». Freno: S/flecha abajo o inclinar el móvil atrás si usas Incl.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
@@ -605,6 +616,7 @@ export function buildGameUi(
     btnTouchLeft,
     btnTouchForward,
     btnTouchRight,
+    btnTilt,
     pingBadge,
     menuOverlay,
     toggleSlider,

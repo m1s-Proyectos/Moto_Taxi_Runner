@@ -55,7 +55,17 @@ import {
 } from '../ui/buildGameUi';
 import { drawMinimap } from '../ui/minimap';
 import { circleIntersectsObstacle, resolveCircleObstacle } from './collision';
-import { attachKeyboard, attachTouchPad, pollInput } from './input';
+import {
+  attachKeyboard,
+  attachMouseAim,
+  attachPointerDriver,
+  attachTouchPad,
+  disposeTiltListener,
+  pollInput,
+  requestTiltPermissionIfNeeded,
+  setTiltInputOn,
+  setTiltRecalibrationPending,
+} from './input';
 import {
   addZebraCrossingOnRoad,
   createCrossingPedestriansOnRoad,
@@ -124,6 +134,9 @@ export class MotoGame {
 
   private detachKeyboard: (() => void) | null = null;
   private detachTouchPad: (() => void) | null = null;
+  private detachMouseAim: (() => void) | null = null;
+  private detachPointerDriver: (() => void) | null = null;
+  private tiltInputAbort: AbortController | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private raf = 0;
 
@@ -244,12 +257,51 @@ export class MotoGame {
   start(): void {
     this.detachKeyboard?.();
     this.detachTouchPad?.();
+    this.detachMouseAim?.();
+    this.detachPointerDriver?.();
+    this.tiltInputAbort?.abort();
+    this.tiltInputAbort = new AbortController();
     this.detachKeyboard = attachKeyboard();
     this.detachTouchPad = attachTouchPad({
       forward: this.ui.btnTouchForward,
       left: this.ui.btnTouchLeft,
       right: this.ui.btnTouchRight,
     });
+    this.detachMouseAim = attachMouseAim(this.renderer.domElement);
+    this.detachPointerDriver = attachPointerDriver(this.renderer.domElement);
+
+    const tiltSig = this.tiltInputAbort.signal;
+    this.ui.btnTilt.addEventListener(
+      'click',
+      async () => {
+        if (tiltSig.aborted) return;
+        const wasOn = this.ui.btnTilt.getAttribute('aria-pressed') === 'true';
+        if (!wasOn) {
+          if (!(await requestTiltPermissionIfNeeded())) return;
+          setTiltRecalibrationPending();
+          setTiltInputOn(true);
+          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
+          this.ui.btnTilt.classList.add('mtr-tilt-on');
+          this.ui.btnTilt.textContent = 'Incl. on';
+        } else {
+          setTiltInputOn(false);
+          this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+          this.ui.btnTilt.classList.remove('mtr-tilt-on');
+          this.ui.btnTilt.textContent = 'Incl. off';
+        }
+      },
+      { signal: tiltSig },
+    );
+    this.ui.btnTilt.addEventListener(
+      'dblclick',
+      (e) => {
+        e.preventDefault();
+        if (this.ui.btnTilt.getAttribute('aria-pressed') === 'true') {
+          setTiltRecalibrationPending();
+        }
+      },
+      { signal: tiltSig },
+    );
     this.renderer.domElement.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
@@ -277,6 +329,16 @@ export class MotoGame {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     window.removeEventListener('resize', this.onResize);
+    this.tiltInputAbort?.abort();
+    this.tiltInputAbort = null;
+    disposeTiltListener();
+    this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+    this.ui.btnTilt.classList.remove('mtr-tilt-on');
+    this.ui.btnTilt.textContent = 'Incl. off';
+    this.detachPointerDriver?.();
+    this.detachPointerDriver = null;
+    this.detachMouseAim?.();
+    this.detachMouseAim = null;
     this.detachTouchPad?.();
     this.detachTouchPad = null;
     this.detachKeyboard?.();

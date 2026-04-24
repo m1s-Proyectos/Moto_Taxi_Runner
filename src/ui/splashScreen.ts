@@ -18,49 +18,9 @@ const icBolt = `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" ari
 
 const icWifi = `<svg class="h-4 w-4 text-yellow-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0"/></svg>`;
 
-const icWarn = `<svg class="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z"/></svg>`;
+const icKeyboard = `<svg class="h-4 w-4 text-amber-400/90" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 003 9.75v4.5A2.25 2.25 0 005.25 16.5h13.5A2.25 2.25 0 0021 14.25v-4.5a2.25 2.25 0 00-2.25-2.25H5.25z"/></svg>`;
 
-function drawSplashRadar(canvas: HTMLCanvasElement): void {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = 140;
-  const h = 140;
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.scale(dpr, dpr);
-  ctx.fillStyle = 'rgba(6,8,12,0.92)';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = 'rgba(250,204,21,0.15)';
-  for (let g = 0; g < 6; g++) {
-    ctx.strokeRect(10 + g * 6, 10 + g * 6, w - 20 - g * 12, h - 20 - g * 12);
-  }
-  ctx.strokeStyle = 'rgba(250,204,21,0.35)';
-  ctx.setLineDash([3, 4]);
-  ctx.beginPath();
-  ctx.moveTo(24, 108);
-  ctx.lineTo(52, 72);
-  ctx.lineTo(78, 88);
-  ctx.lineTo(108, 38);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = 'rgba(250,204,21,0.85)';
-  for (const [x, y] of [
-    [24, 108],
-    [52, 72],
-    [78, 88],
-    [108, 38],
-  ] as const) {
-    ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = 'rgba(250,204,21,0.5)';
-  ctx.font = '9px system-ui,sans-serif';
-  ctx.fillText('CITY_GRID', 8, 12);
-}
+const icDevice = `<svg class="h-4 w-4 text-cyan-400/80" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3"/></svg>`;
 
 /**
  * Pantalla de inicio estilo mockup `public/img/home.jpg`: neón, vidrio, GSAP.
@@ -97,30 +57,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       </div>
     </header>
 
-    <div class="grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-[minmax(0,220px)_1fr_minmax(0,240px)] md:gap-6 md:p-6 lg:px-10">
-      <aside class="flex flex-col gap-3 md:pt-4">
-        <div class="splash-panel rounded-xl border border-yellow-500/20 bg-black/50 p-4 backdrop-blur-xl">
-          <h3 class="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500/90">System_controls</h3>
-          <ul class="space-y-2 text-[11px] text-zinc-400">
-            <li class="flex justify-between gap-2"><span class="text-zinc-500">Acelerar</span><kbd class="rounded border border-zinc-600 bg-zinc-900 px-1.5 font-mono text-yellow-200">W</kbd></li>
-            <li class="flex justify-between gap-2"><span class="text-zinc-500">Freno</span><kbd class="rounded border border-zinc-600 bg-zinc-900 px-1.5 font-mono text-yellow-200">S</kbd></li>
-            <li class="flex justify-between gap-2"><span class="text-zinc-500">Giro</span><kbd class="rounded border border-zinc-600 bg-zinc-900 px-1.5 font-mono text-yellow-200">A</kbd><kbd class="rounded border border-zinc-600 bg-zinc-900 px-1.5 font-mono text-yellow-200">D</kbd></li>
-            <li class="flex justify-between gap-2"><span class="text-zinc-500">Reinicio</span><kbd class="rounded border border-zinc-600 bg-zinc-900 px-1.5 font-mono text-yellow-200">R</kbd></li>
-          </ul>
-        </div>
-        <div class="splash-panel rounded-xl border border-yellow-500/20 bg-black/50 p-4 backdrop-blur-xl">
-          <h3 class="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500/90">Engine_status</h3>
-          <div class="flex items-center gap-2">
-            ${icWarn}
-            <span class="rounded border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">Nominal</span>
-          </div>
-        </div>
-        <div class="splash-panel rounded-xl border border-yellow-500/20 bg-black/50 p-3 backdrop-blur-xl">
-          <h3 class="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500/90">City_grid_v2</h3>
-          <canvas data-splash-radar class="mx-auto block rounded border border-yellow-500/20"></canvas>
-        </div>
-      </aside>
-
+    <div class="grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_minmax(0,240px)] md:gap-6 md:p-6 lg:px-10">
       <main class="flex flex-col items-center justify-center gap-6 py-6 md:py-10">
         <h1 class="splash-title text-center text-3xl font-black italic tracking-tighter text-yellow-400 drop-shadow-[0_0_24px_rgba(250,204,21,0.45)] sm:text-5xl md:text-6xl lg:text-7xl">
           MOTOTAXI<br class="sm:hidden" /><span class="hidden sm:inline"> </span>RUNNER
@@ -140,32 +77,63 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
         </div>
       </main>
 
-      <aside class="flex flex-col gap-3 md:pt-4">
-        <div class="splash-panel rounded-xl border border-yellow-500/20 bg-black/50 p-4 backdrop-blur-xl">
-          <h3 class="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500/90">Top_runners</h3>
-          <ol class="space-y-2 text-[11px]">
-            <li class="flex justify-between gap-2 border-b border-zinc-800/80 pb-2"><span class="font-mono text-yellow-500">01</span><span class="truncate text-zinc-200">NEON_DRIFTER</span><span class="shrink-0 font-mono text-zinc-500">1:42.08</span></li>
-            <li class="flex justify-between gap-2 border-b border-zinc-800/80 pb-2"><span class="font-mono text-zinc-500">02</span><span class="truncate text-zinc-300">LIMA_NIGHT</span><span class="shrink-0 font-mono text-zinc-500">1:44.51</span></li>
-            <li class="flex justify-between gap-2"><span class="font-mono text-zinc-500">03</span><span class="truncate text-zinc-300">TUK_MASTER</span><span class="shrink-0 font-mono text-zinc-500">1:47.22</span></li>
-          </ol>
-          <p class="mt-3 cursor-default text-[9px] font-semibold uppercase tracking-wider text-yellow-500/70">Ver ranking completo →</p>
-        </div>
-        <div class="splash-panel flex items-center justify-between gap-2 rounded-xl border border-yellow-500/20 bg-black/50 px-4 py-3 backdrop-blur-xl">
-          <div class="flex items-center gap-2">
-            ${icWifi}
-            <span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Latencia</span>
+      <aside class="flex w-full max-w-md flex-col gap-3 md:mx-0 md:max-w-none md:pt-2 lg:pt-4">
+        <div class="splash-panel overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-950/90 to-black/60 shadow-[0_0_0_1px_rgba(250,204,21,0.06),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
+          <div class="flex items-center justify-between border-b border-zinc-800/90 bg-zinc-900/50 px-3 py-2.5">
+            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/95">Tiempos demo</span>
+            <span class="rounded border border-zinc-700/80 bg-zinc-950/80 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">Ref.</span>
           </div>
-          <span data-splash-ping class="font-mono text-sm font-bold text-yellow-400">12 ms</span>
+          <div class="grid grid-cols-[2rem_1fr_auto] gap-x-2 border-b border-zinc-800/50 px-3 py-1.5 text-[8px] font-bold uppercase tracking-wider text-zinc-500">
+            <span>#</span>
+            <span>Piloto</span>
+            <span class="text-right">Crono</span>
+          </div>
+          <ol class="text-[11px]">
+            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 border-b border-zinc-800/40 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
+              <span class="font-mono text-amber-400">01</span><span class="min-w-0 truncate font-medium">NEON_DRIFTER</span><span class="shrink-0 text-right font-mono text-zinc-400 tabular-nums">1:42.08</span>
+            </li>
+            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 border-b border-zinc-800/40 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
+              <span class="font-mono text-zinc-500">02</span><span class="min-w-0 truncate">LIMA_NIGHT</span><span class="shrink-0 text-right font-mono text-zinc-500 tabular-nums">1:44.51</span>
+            </li>
+            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
+              <span class="font-mono text-zinc-500">03</span><span class="min-w-0 truncate">TUK_MASTER</span><span class="shrink-0 text-right font-mono text-zinc-500 tabular-nums">1:47.22</span>
+            </li>
+          </ol>
+          <p class="border-t border-zinc-800/50 bg-zinc-950/40 px-2 py-1.5 text-center text-[8px] text-zinc-500">Ranking con Supabase al acabar (ruta: Pupy → Papá → Casa)</p>
         </div>
-        <div class="splash-panel rounded-xl border border-yellow-500/20 bg-black/50 p-4 backdrop-blur-xl">
-          <h3 class="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-yellow-500/90">Velocity</h3>
-          <p class="font-mono text-3xl font-bold tabular-nums text-yellow-400">0 <span class="text-lg font-semibold text-zinc-500">km/h</span></p>
-          <p class="mt-1 text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500">Standby</p>
+        <div class="splash-panel flex gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-2">
+          <div class="min-w-0 flex-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 px-2 py-1.5">
+            <div class="text-[8px] font-bold uppercase tracking-widest text-zinc-500">${icWifi} Ping</div>
+            <span data-splash-ping class="font-mono text-base font-bold leading-none text-amber-400">12<span class="text-xs text-amber-400/50">ms</span></span>
+          </div>
+          <div class="min-w-0 flex-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 px-2 py-1.5">
+            <div class="text-[8px] font-bold uppercase tracking-widest text-zinc-500">Veloc.</div>
+            <p class="font-mono text-base font-bold leading-none text-zinc-300">0<small class="ml-0.5 text-[10px] text-zinc-500">km/h</small></p>
+          </div>
         </div>
       </aside>
     </div>
 
-    <footer class="splash-panel mt-auto shrink-0 border-t border-yellow-500/10 bg-black/40 px-4 py-3 text-center backdrop-blur-md md:px-8">
+    <div class="splash-controls-row shrink-0 border-t border-yellow-500/10 bg-black/25 px-3 py-2 md:px-6">
+      <div
+        class="splash-panel mx-auto w-full max-w-3xl rounded-xl border border-amber-500/12 bg-zinc-950/80 px-3 py-2.5 shadow-sm ring-1 ring-amber-500/5 md:px-4"
+        aria-label="Controles de entrada"
+      >
+        <p class="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-amber-500/80">${icKeyboard} Controles</p>
+        <div class="flex flex-wrap content-start items-center gap-x-2.5 gap-y-1.5 text-[10px] text-zinc-500">
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="shrink-0 text-zinc-500">Acelerar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">W</kbd><span class="text-zinc-600">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Arriba">↑</kbd></span>
+          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-zinc-500">Freno</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">S</kbd><span class="text-zinc-600">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Abajo">↓</kbd></span>
+          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-zinc-500">Giro</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">A</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">D</kbd><span class="text-zinc-600">/</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Izq.">←</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Der.">→</kbd></span>
+          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
+          <span class="inline-flex items-center gap-1.5"><span class="text-zinc-500">Reiniciar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">R</kbd></span>
+        </div>
+        <p class="mt-1.5 border-t border-zinc-800/60 pt-1.5 text-[9px] leading-snug text-zinc-500">${icDevice}<span class="text-zinc-400">Móvil:</span> barra bajo + opción <span class="text-zinc-500">Incl. on</span> (giro/avan./frenar) · <span class="text-zinc-400">PC:</span> giro con ratón sobre el juego; W o clic sostenido = gas</p>
+      </div>
+    </div>
+
+    <footer class="splash-panel mt-0 shrink-0 border-t border-yellow-500/10 bg-black/40 px-4 py-3 text-center backdrop-blur-md md:px-8">
       <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[9px] font-medium uppercase tracking-wider text-zinc-600">
         <span class="cursor-default hover:text-zinc-500">Privacidad</span>
         <span class="cursor-default hover:text-zinc-500">Términos</span>
@@ -177,9 +145,6 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
   `;
 
   host.appendChild(root);
-
-  const radar = root.querySelector<HTMLCanvasElement>('[data-splash-radar]');
-  if (radar) drawSplashRadar(radar);
 
   const motoHero = root.querySelector<HTMLImageElement>('[data-splash-moto-hero]');
   if (motoHero) {
