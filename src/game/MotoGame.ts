@@ -268,17 +268,17 @@ export class MotoGame {
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
 
-    const ambient = new THREE.AmbientLight(0x3d3e48, 0.36);
+    const ambient = new THREE.AmbientLight(0x3d3e48, 0.52);
     this.scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0x1c2648, 0x10121a, 0.48);
+    const hemi = new THREE.HemisphereLight(0x1c2648, 0x10121a, 0.68);
     this.scene.add(hemi);
-    const moonLight = new THREE.DirectionalLight(0xaab8d8, 0.45);
+    const moonLight = new THREE.DirectionalLight(0xaab8d8, 0.65);
     moonLight.position.set(-40, 55, 20);
     this.scene.add(moonLight);
-    const street = new THREE.DirectionalLight(0xffe0c4, 0.34);
+    const street = new THREE.DirectionalLight(0xffe0c4, 0.54);
     street.position.set(2, 14, 8);
     this.scene.add(street);
-    const roadFill = new THREE.DirectionalLight(0x8a9ab8, 0.12);
+    const roadFill = new THREE.DirectionalLight(0x8a9ab8, 0.22);
     roadFill.position.set(0, 1, 0);
     this.scene.add(roadFill);
 
@@ -503,7 +503,7 @@ export class MotoGame {
     for (let i = 0; i < nSpill; i++) {
       const t = 0.035 + (i / Math.max(1, nSpill - 1)) * 0.93;
       curve.getPointAt(t, spillP);
-      const spill = new THREE.PointLight(0xffd5b0, 1.15, 54, 2);
+      const spill = new THREE.PointLight(0xffd5b0, 1.45, 64, 2);
       spill.position.set(spillP.x, 5.2, spillP.z);
       this.scene.add(spill);
     }
@@ -1253,7 +1253,7 @@ export class MotoGame {
             if (res.hit) {
               x = res.x;
               z = res.z;
-              this.speed *= 0.35;
+              this.speed *= 0.25;
             }
           }
         }
@@ -1277,7 +1277,7 @@ export class MotoGame {
               if (inPedZone) touchingPedInZone = true;
               x = px + (dx / dist) * rr;
               z = pz + (dz / dist) * rr;
-              this.speed *= 0.38;
+              this.speed *= 0.25;
             }
           }
         }

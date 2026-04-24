@@ -354,6 +354,29 @@ function addAerialWires(root: THREE.Object3D, z0: number, z1: number): void {
   root.add(new THREE.Line(g1, mat), new THREE.Line(g2, mat));
 }
 
+/** Invisible barriers to prevent vehicle from passing through buildings */
+function addBuildingCollisionBarriers(root: THREE.Object3D, zStart: number, zEnd: number): void {
+  const barrierMat = new THREE.MeshStandardMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0,
+    roughness: 1,
+    metalness: 0,
+  });
+  
+  // Left side barriers
+  const leftBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  const leftBarrier = new THREE.Mesh(leftBarrierGeo, barrierMat);
+  leftBarrier.position.set(-15, 4, (zStart + zEnd) / 2);
+  root.add(leftBarrier);
+  
+  // Right side barriers
+  const rightBarrierGeo = new THREE.BoxGeometry(2, 8, zEnd - zStart);
+  const rightBarrier = new THREE.Mesh(rightBarrierGeo, barrierMat);
+  rightBarrier.position.set(15, 4, (zStart + zEnd) / 2);
+  root.add(rightBarrier);
+}
+
 export function addCityscape(scene: THREE.Scene): void {
   const root = new THREE.Group();
   root.name = 'cityscape';
@@ -388,12 +411,12 @@ export function addCityscape(scene: THREE.Scene): void {
     emissive: 0x2c323e,
     emissiveIntensity: 0.12,
   });
-  const curbGeo = new THREE.BoxGeometry(0.22, 0.15, swLen);
+  const curbGeo = new THREE.BoxGeometry(0.22, 0.25, swLen);
   const curbL = new THREE.Mesh(curbGeo, curbMat);
-  curbL.position.set(-9, 0.07, zCenter);
+  curbL.position.set(-9, 0.12, zCenter);
   root.add(curbL);
   const curbR = new THREE.Mesh(curbGeo, curbMat);
-  curbR.position.set(9, 0.07, zCenter);
+  curbR.position.set(9, 0.12, zCenter);
   root.add(curbR);
 
   addPerimeterStreets(root, zCenter, 440);
@@ -412,6 +435,9 @@ export function addCityscape(scene: THREE.Scene): void {
 
   addStylizedTrees(root, 1, 38, -370, 18, 11);
   addStylizedTrees(root, -1, 42, -368, 19, 13);
+
+  // Add building collision barriers
+  addBuildingCollisionBarriers(root, zStart, zEnd);
 
   scene.add(root);
 }
