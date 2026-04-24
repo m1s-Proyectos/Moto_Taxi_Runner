@@ -129,6 +129,13 @@ export class MotoGame {
   private readonly bike = new THREE.Group();
   private readonly checkpointMeshes: THREE.Group[] = [];
   private readonly camTarget = new THREE.Vector3();
+  /** Cámara más cerca en móvil (sobre todo apaisado) para ver mejor pista y moto. */
+  private cameraBack = 12;
+  private cameraUp = 7;
+  private cameraLook = 6;
+  private onOrientation = (): void => {
+    requestAnimationFrame(() => this.onResize());
+  };
 
   private readonly ui: GameUiRefs;
 
@@ -251,6 +258,7 @@ export class MotoGame {
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(this.container);
     window.addEventListener('resize', this.onResize);
+    window.addEventListener('orientationchange', this.onOrientation);
     requestAnimationFrame(() => this.onResize());
   }
 
@@ -329,6 +337,7 @@ export class MotoGame {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('orientationchange', this.onOrientation);
     this.tiltInputAbort?.abort();
     this.tiltInputAbort = null;
     disposeTiltListener();
@@ -358,6 +367,17 @@ export class MotoGame {
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
     this.renderer.domElement.focus({ preventScroll: true });
+    if (typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+      void (async () => {
+        if (await requestTiltPermissionIfNeeded()) {
+          setTiltRecalibrationPending();
+          setTiltInputOn(true);
+          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
+          this.ui.btnTilt.classList.add('mtr-tilt-on');
+          this.ui.btnTilt.textContent = 'Incl. on';
+        }
+      })();
+    }
   }
 
   private applyBikeStyle(style: BikeStyle): void {
@@ -386,11 +406,35 @@ export class MotoGame {
     }
     w = Math.max(1, w);
     h = Math.max(1, h);
+    this.updateCameraRigForViewport(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h, true);
   };
+
+  private updateCameraRigForViewport(w: number, h: number): void {
+    const isTouch = typeof window !== 'undefined' && 'ontouchstart' in window;
+    const landscape = w > h;
+    const shortSide = Math.min(w, h);
+    const isPhone = isTouch && shortSide < 640;
+    if (isPhone && landscape) {
+      this.cameraBack = 6.6;
+      this.cameraUp = 3.5;
+      this.cameraLook = 2.5;
+      this.camera.fov = 50;
+    } else if (isTouch) {
+      this.cameraBack = 8.2;
+      this.cameraUp = 4.8;
+      this.cameraLook = 3.2;
+      this.camera.fov = 54;
+    } else {
+      this.cameraBack = 12;
+      this.cameraUp = 7;
+      this.cameraLook = 6;
+      this.camera.fov = 58;
+    }
+  }
 
   private buildWorld(): void {
     /** Abarca salida z≈+4 y final de ruta z≈-320 con margen. */
@@ -1250,9 +1294,15 @@ export class MotoGame {
 
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.bike.quaternion);
     const back = forward.clone().multiplyScalar(-1);
-    const desiredCam = this.bike.position.clone().add(back.multiplyScalar(12)).add(new THREE.Vector3(0, 7, 0));
+    const desiredCam = this.bike.position
+      .clone()
+      .add(back.multiplyScalar(this.cameraBack))
+      .add(new THREE.Vector3(0, this.cameraUp, 0));
     this.camera.position.lerp(desiredCam, 1 - Math.pow(0.001, dt));
-    this.camTarget.copy(this.bike.position).add(forward.clone().multiplyScalar(6)).add(new THREE.Vector3(0, 1.2, 0));
+    this.camTarget
+      .copy(this.bike.position)
+      .add(forward.clone().multiplyScalar(this.cameraLook))
+      .add(new THREE.Vector3(0, 1.1, 0));
     this.camera.lookAt(this.camTarget);
 
     this.renderer.render(this.scene, this.camera);

@@ -25,7 +25,13 @@ let tiltSteer = 0;
 let tiltThrottle = 0;
 let tiltBrake = 0;
 let tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null;
+let motionHandler: ((e: DeviceMotionEvent) => void) | null = null;
 let tiltHandlerAttached = false;
+let motionHandlerAttached = false;
+let orientationSteer = 0;
+let motionSteer = 0;
+const MOTION_SMOOTH = 0.72;
+const MOTION_RATE_SCALE = 0.00085;
 
 function readSteerKeys(): number {
   let s = 0;
@@ -115,6 +121,30 @@ export function attachPointerDriver(el: HTMLElement): () => void {
   };
 }
 
+/**
+ * En portrait `gamma` suele ser el balanceo izq/der. En apaisado el mismo giro físico
+ * a menudo mueve `beta` hacia/ desde 90 (y `gamma` a veces ~0) — se combina beta+gamma.
+ */
+function orientationSteerFromTilt(b: number | null, g: number | null): number {
+  if (b == null && g == null) return 0;
+  const w = typeof window !== 'undefined' ? window.innerWidth : 0;
+  const h = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const isLandscape = w > 0 && h > 0 && w > h;
+  if (isLandscape) {
+    const gVal = g ?? 0;
+    if (b != null && Math.abs(gVal) < 3.2) {
+      return Math.max(-1, Math.min(1, -(b - 90) / 25));
+    }
+    const gPart = (gVal / 30) * 0.65;
+    const bPart = b != null ? (-(b - 90) / 30) * 0.6 : 0;
+    return Math.max(-1, Math.min(1, gPart + bPart));
+  }
+  if (g != null) {
+    return Math.max(-1, Math.min(1, g / 32));
+  }
+  return b != null ? Math.max(-1, Math.min(1, -(b - 90) / 36)) : 0;
+}
+
 function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   if (!tiltInputOn) {
     tiltSteer = 0;
@@ -143,13 +173,37 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
     tiltThrottle = g != null ? 1 : 0;
   }
 
-  if (g != null) {
-    const landscape = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
-    const s = (landscape ? -g : g) / 38;
-    tiltSteer = Math.max(-1, Math.min(1, s));
-  } else {
+  orientationSteer = orientationSteerFromTilt(b, g);
+  mergeTiltSteerValue();
+}
+
+function mergeTiltSteerValue(): void {
+  if (!tiltInputOn) {
     tiltSteer = 0;
+    return;
   }
+  tiltSteer = Math.max(
+    -1,
+    Math.min(1, orientationSteer * 0.8 + Math.max(-1, Math.min(1, motionSteer * 0.9)) * 0.5),
+  );
+}
+
+function updateTiltFromMotion(e: DeviceMotionEvent): void {
+  if (!tiltInputOn) {
+    motionSteer = 0;
+    return;
+  }
+  const rr = e.rotationRate;
+  if (!rr) return;
+  const w = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+  const raw =
+    w && (rr.gamma == null || Math.abs(rr.gamma) < 1.2)
+      ? (rr.beta ?? 0) * 0.55 + (rr.gamma ?? 0) * 0.35
+      : (rr.gamma ?? 0);
+  const t = raw * MOTION_RATE_SCALE;
+  motionSteer = motionSteer * MOTION_SMOOTH + t * (1 - MOTION_SMOOTH);
+  motionSteer = Math.max(-1, Math.min(1, motionSteer));
+  mergeTiltSteerValue();
 }
 
 function ensureTiltListener(): void {
@@ -159,12 +213,22 @@ function ensureTiltListener(): void {
   tiltHandlerAttached = true;
 }
 
+function ensureMotionListener(): void {
+  if (motionHandlerAttached) return;
+  motionHandler = (e) => updateTiltFromMotion(e);
+  window.addEventListener('devicemotion', motionHandler, { passive: true } as AddEventListenerOptions);
+  motionHandlerAttached = true;
+}
+
 /** Inclina el dispositivo: activa el listener; en iOS 13+ hay que pedir permiso antes. */
 export function setTiltInputOn(on: boolean): void {
   tiltInputOn = on;
   if (on) {
     ensureTiltListener();
+    ensureMotionListener();
   } else {
+    orientationSteer = 0;
+    motionSteer = 0;
     tiltSteer = 0;
     tiltThrottle = 0;
     tiltBrake = 0;
@@ -176,13 +240,18 @@ export function setTiltRecalibrationPending(): void {
 }
 
 /**
- * Móviles Safari: el usuario debe conceder el permiso (gesto del usuario, p. ej. toque en el botón).
+ * iOS 13+ Safari: orientación y movimiento requieren permisos distintos; pide ambos.
  */
 export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
   const D = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
+  const M = DeviceMotionEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
   if (typeof D.requestPermission === 'function') {
-    const r = await D.requestPermission();
-    return r === 'granted';
+    const o = await D.requestPermission();
+    if (o !== 'granted') return false;
+  }
+  if (typeof M.requestPermission === 'function') {
+    const m = await M.requestPermission();
+    if (m !== 'granted') return false;
   }
   return true;
 }
@@ -191,8 +260,13 @@ export function disposeTiltListener(): void {
   if (tiltHandler && tiltHandlerAttached) {
     window.removeEventListener('deviceorientation', tiltHandler);
   }
+  if (motionHandler && motionHandlerAttached) {
+    window.removeEventListener('devicemotion', motionHandler);
+  }
   tiltHandler = null;
+  motionHandler = null;
   tiltHandlerAttached = false;
+  motionHandlerAttached = false;
   setTiltInputOn(false);
   tiltRefBeta = null;
 }
