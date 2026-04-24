@@ -23,7 +23,9 @@ let useMouseAim = false;
  * Requiere activar; en iOS 13+ permiso de orientación. Se toma un centro al activar o al recalibrar.
  */
 let tiltInputOn = false;
-let tiltSteer = 0;
+/** Giro bruto -1..1 desde orientación (tras calibrar); el suavizado y dead zone se aplican en `pollInput`. */
+let tiltSteerRaw = 0;
+let tiltFiltered = 0;
 let tiltRefG: number | null = null;
 let tiltRefB: number | null = null;
 let tiltCalAccG = 0;
@@ -39,6 +41,16 @@ const TILT_CAL_MAX_WAIT = 18;
 const TILT_SENSE_P = 0.05;
 const TILT_SENSE_L_G = 0.052;
 const TILT_SENSE_L_B = 0.045;
+const TILT_DEADZONE = 0.04;
+const TILT_SMOOTH = 0.12;
+
+const W_STEER_KEY = 0.85;
+const W_STEER_PAD = 1.0;
+const W_STEER_POINTER = 0.75;
+const W_STEER_MOUSE = 0.65;
+const W_STEER_TILT = 0.6;
+const W_STEER_TILT_WITH_POINTER = 0.25;
+const STEER_NONLINEAR_EXP = 1.4;
 
 function readSteerKeys(): number {
   let s = 0;
@@ -137,7 +149,8 @@ function resetTiltCalibration(): void {
   tiltCalCountB = 0;
   tiltCalTicks = 0;
   orientationSteer = 0;
-  tiltSteer = 0;
+  tiltSteerRaw = 0;
+  tiltFiltered = 0;
 }
 
 /** Giro a partir de la diferencia respecto al pose «neutro» calibrada (no valores absolutos). */
@@ -199,7 +212,7 @@ function tryFinishTiltCalibration(b: number | null, g: number | null): void {
 
 function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   if (!tiltInputOn) {
-    tiltSteer = 0;
+    tiltSteerRaw = 0;
     return;
   }
   const b = e.beta;
@@ -216,7 +229,7 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   const rG = tiltRefG ?? 0;
   const rB = tiltRefB ?? 90;
   orientationSteer = relativeSteerFromTilt(b, g, rG, rB);
-  tiltSteer = Math.max(-1, Math.min(1, orientationSteer));
+  tiltSteerRaw = Math.max(-1, Math.min(1, orientationSteer));
 }
 
 function ensureTiltListener(): void {
@@ -297,6 +310,13 @@ export function attachMouseAim(el: HTMLElement): () => void {
   };
 }
 
+/** Curva de respuesta: más mando cerca de recto, más sensibilidad al acercarse a -1/1. */
+function applySteerNonlinearity(steerSum: number, exp: number): number {
+  const a = Math.abs(steerSum);
+  if (a < 1e-5) return 0;
+  return Math.sign(steerSum) * Math.pow(a, exp);
+}
+
 export function pollInput(): InputState {
   const kSteer = readSteerKeys();
   const kThrottle = readThrottleKeys();
@@ -306,8 +326,31 @@ export function pollInput(): InputState {
   const pThrottle = padForward ? 1 : 0;
   const ptrSteer = pointerDriving ? pointerSteer : 0;
   const aim = useMouseAim ? mouseAimSteer : 0;
-  const tS = tiltInputOn ? tiltSteer : 0;
-  const steer = Math.max(-1, Math.min(1, kSteer + pSteer + ptrSteer + aim + tS));
+  const ptr = pointerDriving ? ptrSteer : 0;
+  const aimG = useMouseAim ? aim : 0;
+
+  if (tiltInputOn) {
+    let tr = tiltSteerRaw;
+    if (Math.abs(tr) < TILT_DEADZONE) tr = 0;
+    tiltFiltered += (tr - tiltFiltered) * TILT_SMOOTH;
+  } else {
+    tiltFiltered = 0;
+  }
+
+  const tiltWeight = pointerDriving ? W_STEER_TILT_WITH_POINTER : W_STEER_TILT;
+  const tForBlend = tiltInputOn ? tiltFiltered : 0;
+
+  const steerWeightedUnclamped =
+    kSteer * W_STEER_KEY +
+    pSteer * W_STEER_PAD +
+    ptr * W_STEER_POINTER +
+    aimG * W_STEER_MOUSE +
+    tForBlend * tiltWeight;
+  const steerWeighted = Math.max(-1, Math.min(1, steerWeightedUnclamped));
+
+  const steerCurved = applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
+  const steer = Math.max(-1, Math.min(1, steerCurved));
+
   const throttle = Math.max(kThrottle, pThrottle, pointerDriving ? 1 : 0);
   const brake = kBrake;
 

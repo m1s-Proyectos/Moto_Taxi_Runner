@@ -161,6 +161,7 @@ export class MotoGame {
   private exchangeMode: 'drop' | 'pick' | 'final_drop' | null = null;
 
   private speed = 0;
+  private currentSteer = 0;
 
   private readonly sparks: Array<{ mesh: THREE.Mesh; age: number; vel: THREE.Vector3 }> = [];
   private lastBumpMs = 0;
@@ -634,6 +635,7 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.exchangeMode = null;
     this.speed = 0;
+    this.currentSteer = 0;
     this.lastBumpMs = 0;
     this.wasTouchingVehicle = false;
     this.wasTouchingPedInZone = false;
@@ -1085,13 +1087,20 @@ export class MotoGame {
 
       const canDrive = this.phase === 'racing';
 
-      const steerSign = input.steer;
-      const steerPower = THREE.MathUtils.lerp(
-        PHYS.steerLow,
-        PHYS.steerHigh,
-        Math.min(1, this.speed / maxSpeed),
-      );
-      this.bike.rotation.y -= steerSign * steerPower * dt;
+      const steerInput = input.steer;
+
+      if (canDrive) {
+        const speedFactor = Math.max(0.25, Math.abs(this.speed) / maxSpeed);
+        const steerStrength = THREE.MathUtils.lerp(
+          PHYS.steerLow,
+          PHYS.steerHigh,
+          speedFactor,
+        );
+        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, 0.15);
+        this.bike.rotation.y -= this.currentSteer * steerStrength * dt;
+      } else {
+        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, 0, 0.22);
+      }
 
       if (canDrive && input.brake > 0) {
         const b = brake * dt;
@@ -1110,6 +1119,8 @@ export class MotoGame {
 
       if (canDrive) {
         this.bike.translateZ(-this.speed * dt);
+        // pequeño deslizamiento lateral para que el giro se sienta real
+        this.bike.position.x += Math.sin(this.bike.rotation.y) * this.speed * 0.02;
       }
 
       let x = this.bike.position.x;
@@ -1195,7 +1206,7 @@ export class MotoGame {
       const yawNow = this.bike.rotation.y;
       const yawRate = (yawNow - this.bikeDriftLastYaw) / Math.max(1e-4, dt);
       const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
-      const steerAbs = Math.abs(steerSign);
+      const steerAbs = Math.abs(steerInput);
       const fromSteer = steerAbs * speedNorm * 0.64;
       const fromTurn = Math.min(1, Math.abs(yawRate) * 0.5) * speedNorm;
       const driftI = Math.min(1, fromSteer * 0.6 + fromTurn * 0.5);
@@ -1204,7 +1215,7 @@ export class MotoGame {
       if (isDrift) {
         const turnSign =
           steerAbs > 0.04
-            ? Math.sign(steerSign)
+            ? Math.sign(steerInput)
             : Math.abs(yawRate) > 0.07
               ? -Math.sign(yawRate)
               : 0;
