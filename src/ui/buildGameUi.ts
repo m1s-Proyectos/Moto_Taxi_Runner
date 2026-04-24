@@ -344,7 +344,7 @@ export function buildGameUi(
   btnTilt.setAttribute('aria-pressed', 'false');
   btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar con el botón de gas a la derecha)');
   btnTilt.className =
-    'mtr-touch-tilt pointer-events-auto w-full max-w-[8.5rem] shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors';
+    'mtr-touch-tilt pointer-events-auto w-full max-w-[8.5rem] shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors landscape:max-w-full landscape:px-2';
   btnTilt.textContent = 'Giro off';
 
   const touchRow = document.createElement('div');
@@ -353,9 +353,10 @@ export function buildGameUi(
 
   const touchColLeft = document.createElement('div');
   touchColLeft.className =
-    'mtr-touch-cluster-left flex min-h-0 min-w-0 max-w-[48%] flex-1 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1';
+    'mtr-touch-cluster-left flex min-h-0 min-w-0 max-w-[48%] flex-1 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1 landscape:w-max landscape:max-w-[min(4.35rem,30vw)] landscape:flex-none';
   const steerRow = document.createElement('div');
-  steerRow.className = 'mtr-steer-pair flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-2.5';
+  steerRow.className =
+    'mtr-steer-pair flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-2.5 landscape:flex-col landscape:flex-nowrap landscape:items-stretch landscape:justify-end landscape:gap-1.5 sm:landscape:gap-2';
   steerRow.append(btnTouchLeft, btnTouchRight);
   touchColLeft.append(btnTilt, steerRow);
 
@@ -375,7 +376,7 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Mando a dos manos: ← y → a la izquierda (pulgar); gas y freno a la derecha, juntos. Giro por inclinación solo en móvil. Activa Giro y calibra; doble toque = recalibrar. En PC: teclado o ratón. S / ↓ sigue siendo freno. Multitacto: puedes combinar giro, gas y freno.';
+    'Mando a dos manos. En móvil vertical: ← y → en fila. En horizontal: apilados a la izquierda para que quepan. Gas y freno a la derecha. Giro por inclinación solo en móvil. En PC: teclado o ratón. S / ↓ freno. Multitacto.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
