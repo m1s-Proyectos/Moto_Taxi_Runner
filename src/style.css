@@ -278,6 +278,32 @@ html[data-mtr-aspect='tall'] .mtr-touch-pad .mtr-touch-tilt {
   white-space: nowrap;
 }
 
+/* Mobile landscape: force vertical stacking for left controls */
+html[data-mtr-ui='touch'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-cluster-left {
+  min-width: 0;
+  max-width: min(6rem, 35vw);
+  flex: 0 0 auto;
+}
+
+html[data-mtr-ui='touch'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-steer-pair {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+html[data-mtr-ui='touch'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
+  max-width: 100%;
+  align-self: stretch;
+  white-space: nowrap;
+}
+
+html[data-mtr-ui='touch'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-throttle,
+html[data-mtr-ui='touch'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-brake {
+  min-height: 3.5rem;
+}
+
 html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-cluster-left {
   min-width: 0;
   max-width: 48%;
@@ -293,6 +319,28 @@ html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-steer-pair {
 }
 
 html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
+  max-width: 6.75rem;
+  width: auto;
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* Desktop override: keep horizontal layout for desktop */
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-cluster-left {
+  min-width: 0;
+  max-width: 48%;
+  flex: 1 1 0%;
+}
+
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-steer-pair {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
   max-width: 6.75rem;
   width: auto;
   align-self: center;
@@ -342,6 +390,28 @@ html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
     width: auto;
     align-self: center;
   }
+}
+
+/* Desktop override: keep horizontal layout for desktop */
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-cluster-left {
+  min-width: 0;
+  max-width: 48%;
+  flex: 1 1 0%;
+}
+
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-steer-pair {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
+  max-width: 6.75rem;
+  width: auto;
+  align-self: center;
+  white-space: nowrap;
 }
 
 /* Teclas del panel de controles (splash) */

@@ -18,6 +18,9 @@ const UA_PHONE_LIKE =
 /** Nombres de modelo frecuentes (Android) cuando no entra “Mobile”/“Mobi” en el UA. */
 const UA_TABLET_LIKE = /SM-T[0-9]|SHIELD Tablet|KFTT|Tab A|Nexus 7|Nexus 9/i;
 
+/** Large phones/phablets that should be treated as mobile */
+const UA_LARGE_PHONE_LIKE = /SM-G[0-9]{3}|SM-A[0-9]{3}|Pixel [2-9]|OnePlus [0-9]|iPhone [1-9][0-9]* Pro/i;
+
 function isLikelyHandheldFromUserAgent(): boolean {
   const ua = navigator.userAgent;
   if (UA_PHONE_LIKE.test(ua)) {
@@ -27,6 +30,9 @@ function isLikelyHandheldFromUserAgent(): boolean {
     return true;
   }
   if (UA_TABLET_LIKE.test(ua)) {
+    return true;
+  }
+  if (UA_LARGE_PHONE_LIKE.test(ua)) {
     return true;
   }
   if (/(Macintosh|MacIntel)/.test(ua) && 'ontouchstart' in window && navigator.maxTouchPoints > 1) {
@@ -50,7 +56,11 @@ function isTouchPrimaryDevice(): boolean {
     return true;
   }
   if ('ontouchstart' in window) {
-    if (matchMedia('(min-width: 1200px) and (pointer: fine)').matches) {
+    const screenWidth = window.screen.width || window.innerWidth;
+    const screenHeight = window.screen.height || window.innerHeight;
+    const isLargeScreen = Math.max(screenWidth, screenHeight) >= 1200;
+    
+    if (matchMedia('(min-width: 1200px) and (pointer: fine)').matches && !isLargeScreen) {
       return false;
     }
     if (t >= 2 && !matchMedia('(pointer: fine) and (min-width: 1024px)').matches) {

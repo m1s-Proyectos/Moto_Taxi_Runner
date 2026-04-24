@@ -59,7 +59,18 @@ const W_STEER_TILT_WITH_POINTER = 0.25;
 /** Curva suave; más cercana a 1 = giro más directo (mejor con ratón en PC). */
 const STEER_NONLINEAR_EXP = 1.05;
 /** (nx-0.5) * escala → -1..1. */
-const CANVAS_X_STEER_MULT = 3.45;
+const CANVAS_X_STEER_MULT = 2.2;
+
+/** Mouse sensitivity configuration */
+const MOUSE_SENSITIVITY = 0.8;
+const MOUSE_SMOOTHING = 0.15;
+const MOUSE_MAX_DELTA = 0.3;
+
+/** Mouse smoothing state */
+let mouseRawSteer = 0;
+let mouseSmoothedSteer = 0;
+let lastMouseX = 0;
+let mouseInitialized = false;
 
 /** Si el juego (p. ej. MotoGame) ajusta la respuesta con puntero fino sobre el lienzo. */
 export function isMouseAimInputActive(): boolean {
@@ -324,8 +335,25 @@ export function attachMouseAim(el: HTMLElement): () => void {
     if (!can()) return;
     const r = el.getBoundingClientRect();
     if (r.width < 8) return;
+    
+    const currentX = e.clientX;
+    let deltaX = 0;
+    
+    if (mouseInitialized) {
+      deltaX = (currentX - lastMouseX) / r.width;
+      deltaX = Math.max(-MOUSE_MAX_DELTA, Math.min(MOUSE_MAX_DELTA, deltaX));
+      deltaX *= MOUSE_SENSITIVITY;
+    }
+    
+    lastMouseX = currentX;
+    mouseInitialized = true;
+    
     const nx = (e.clientX - r.left) / r.width;
-    mouseAimSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
+    mouseRawSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
+    
+    mouseSmoothedSteer += (mouseRawSteer - mouseSmoothedSteer) * MOUSE_SMOOTHING;
+    mouseAimSteer = mouseSmoothedSteer;
+    
     useMouseAim = true;
   };
   const onEnter = () => {
@@ -334,6 +362,9 @@ export function attachMouseAim(el: HTMLElement): () => void {
   const onLeave = () => {
     useMouseAim = false;
     mouseAimSteer = 0;
+    mouseRawSteer = 0;
+    mouseSmoothedSteer = 0;
+    mouseInitialized = false;
   };
 
   el.addEventListener('mousemove', onMove);
@@ -343,6 +374,9 @@ export function attachMouseAim(el: HTMLElement): () => void {
   return () => {
     useMouseAim = false;
     mouseAimSteer = 0;
+    mouseRawSteer = 0;
+    mouseSmoothedSteer = 0;
+    mouseInitialized = false;
     el.removeEventListener('mousemove', onMove);
     el.removeEventListener('mouseenter', onEnter);
     el.removeEventListener('mouseleave', onLeave);
