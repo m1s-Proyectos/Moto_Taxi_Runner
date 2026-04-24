@@ -1,7 +1,10 @@
 import './style.css';
-import { MotoGame } from './game/MotoGame';
+import { initDeviceInputProfile } from './lib/deviceInputProfile';
 import { isVibeJamPortalArrival } from './lib/vibeJamPortal';
 import { mountSplashScreen } from './ui/splashScreen';
+import { MotoGame } from './game/MotoGame';
+
+initDeviceInputProfile();
 
 function getAppHost(): HTMLElement {
   const el = document.getElementById('app');

@@ -76,6 +76,7 @@ import {
 } from './pedestrians';
 import { createParkedCar } from './parkedCar';
 import { addCityscape } from './worldDecor';
+import { getUseMobileGameUi } from '../lib/deviceInputProfile';
 import { ensureLocalFreeProfile, recordFreeModePersonalBestIfBetter } from '../lib/localFreeProfile';
 import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
 import { DriftTrail } from './driftTrail';
@@ -115,7 +116,7 @@ const TA_BAR_LOW =
   'h-full w-full min-w-0 max-w-full rounded-full bg-gradient-to-r from-red-700 via-red-500 to-amber-400 transition-[width] duration-200 ease-out';
 
 /** Suavizado con Δt (evita muelle distinto a 60/120 fps). Más λ = sigue al input antes. */
-const SMOOTH_STEER_IN_HZ = 19;
+const SMOOTH_STEER_IN_HZ = 24;
 const SMOOTH_STEER_IN_MOUSE_HZ = 27;
 const SMOOTH_STEER_RELEASE_HZ = 16;
 const SMOOTH_CAMERA_FOLLOW_HZ = 18;
@@ -429,16 +430,16 @@ export class MotoGame {
   };
 
   private updateCameraRigForViewport(w: number, h: number): void {
-    const isTouch = typeof window !== 'undefined' && 'ontouchstart' in window;
+    const isMobileRig = typeof window !== 'undefined' && getUseMobileGameUi();
     const landscape = w > h;
     const shortSide = Math.min(w, h);
-    const isPhone = isTouch && shortSide < 640;
+    const isPhone = isMobileRig && shortSide < 640;
     if (isPhone && landscape) {
       this.cameraBack = 6.6;
       this.cameraUp = 3.5;
       this.cameraLook = 2.5;
       this.camera.fov = 50;
-    } else if (isTouch) {
+    } else if (isMobileRig) {
       this.cameraBack = 8.2;
       this.cameraUp = 4.8;
       this.cameraLook = 3.2;
@@ -715,10 +716,8 @@ export class MotoGame {
     this.hidePcControlsHint();
     const w = window;
     const mq = (q: string) => w.matchMedia(q).matches;
-    const isDesktopLike = mq('(min-width: 768px) and (pointer: fine)');
-    const hasTouch = 'ontouchstart' in w || w.navigator.maxTouchPoints > 0;
-    const feelsMobile =
-      mq('(max-width: 1023px)') && (mq('(pointer: coarse)') || (mq('(hover: none)') && hasTouch));
+    const isDesktopForHint =
+      !getUseMobileGameUi() && (mq('(pointer: fine)') || mq('(hover: hover)'));
     const inPortrait = mq('(orientation: portrait)');
 
     const textPc =
@@ -726,9 +725,9 @@ export class MotoGame {
     const textMobileRotate =
       'Para más comodidad, gira tu celular al modo horizontal (mando a dos manos).';
 
-    if (isDesktopLike) {
+    if (isDesktopForHint) {
       this.ui.pcControlsHintText.textContent = textPc;
-    } else if (feelsMobile && inPortrait) {
+    } else if (getUseMobileGameUi() && inPortrait) {
       this.ui.pcControlsHintText.textContent = textMobileRotate;
     } else {
       return;

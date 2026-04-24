@@ -228,7 +228,7 @@ export function buildGameUi(
 
   const kbd = document.createElement('div');
   kbd.className =
-    'pointer-events-none fixed bottom-6 left-6 z-10 max-md:hidden flex gap-5 opacity-50';
+    'mtr-show-desktop-only pointer-events-none fixed bottom-6 left-6 z-10 gap-5 opacity-50';
   kbd.innerHTML = `
     <div class="flex flex-col gap-1.5">
       <div class="flex justify-center">
@@ -253,7 +253,7 @@ export function buildGameUi(
 
   const speedWrap = document.createElement('div');
   speedWrap.className =
-    'pointer-events-none fixed bottom-[7.5rem] right-3 z-10 flex flex-col items-end md:bottom-6 md:right-8';
+    'mtr-hud-speed-wrap pointer-events-none fixed z-10 flex flex-col items-end right-3';
   const speedValue = document.createElement('span');
   speedValue.dataset.role = 'speed-val';
   speedValue.className = 'pr-1 text-4xl font-semibold italic tracking-tight tabular-nums text-zinc-50';
@@ -357,10 +357,13 @@ export function buildGameUi(
 
   const touchColLeft = document.createElement('div');
   touchColLeft.className =
-    'mtr-touch-cluster-left flex min-h-0 min-w-0 max-w-[48%] flex-1 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1 landscape:w-max landscape:max-w-[min(4.35rem,30vw)] landscape:flex-none';
+    'mtr-touch-cluster-left flex min-h-0 min-w-0 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1 ' +
+    'portrait:w-max portrait:max-w-[min(4.4rem,32vw)] portrait:flex-none ' +
+    'landscape:min-w-0 landscape:max-w-[48%] landscape:flex-1';
   const steerRow = document.createElement('div');
   steerRow.className =
-    'mtr-steer-pair flex flex-row flex-wrap items-end justify-start gap-2 sm:gap-2.5 landscape:flex-col landscape:flex-nowrap landscape:items-stretch landscape:justify-end landscape:gap-1.5 sm:landscape:gap-2';
+    'mtr-steer-pair flex flex-col items-stretch justify-end gap-1.5 sm:portrait:gap-2 ' +
+    'landscape:flex-row landscape:flex-wrap landscape:items-end landscape:justify-start landscape:gap-2 sm:landscape:gap-2.5';
   steerRow.append(btnTouchLeft, btnTouchRight);
   touchColLeft.append(btnTilt, steerRow);
 
@@ -380,12 +383,12 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Mando a dos manos. En móvil vertical: ← y → en fila. En horizontal: apilados a la izquierda para que quepan. Gas y freno a la derecha. Giro por inclinación solo en móvil. En PC: teclado o ratón. S / ↓ freno. Multitacto.';
+    'Mando a dos manos. En vertical: ← y → apilados; en horizontal: en fila. Gas y freno a la derecha. Giro por inclinación solo en móvil. En PC: teclado o ratón. S / ↓ freno. Multitacto.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
   touchPad.className =
-    'mtr-touch-pad pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2 md:hidden';
+    'mtr-touch-pad mtr-show-touch-only pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2';
   touchPad.setAttribute('role', 'group');
   touchPad.setAttribute('aria-label', 'Control de conducción');
   touchPad.append(touchRow, touchDetails);
@@ -394,7 +397,7 @@ export function buildGameUi(
   const passengerHud = document.createElement('div');
   passengerHud.dataset.role = 'passenger-hud';
   passengerHud.className =
-    'pointer-events-none fixed bottom-28 left-1/2 z-20 max-md:bottom-48 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
+    'mtr-hud-passenger pointer-events-none fixed left-1/2 z-20 hidden w-[min(92vw,320px)] -translate-x-1/2 transition-opacity duration-200';
   const passengerInner = document.createElement('div');
   passengerInner.className =
     'flex items-center justify-center gap-3 rounded-2xl border border-amber-500/35 bg-zinc-950/90 px-4 py-3 shadow-lg shadow-black/40 backdrop-blur-md';

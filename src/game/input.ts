@@ -362,9 +362,13 @@ export function pollInput(): InputState {
     !tiltInputOn &&
     Math.abs(pSteer) < 0.001 &&
     Math.abs(kSteer) < 0.001;
+  const onlyPadSteer =
+    !tiltInputOn && !pointerDriving && Math.abs(kSteer) < 0.001 && Math.abs(pSteer) > 1e-4;
   const steerCurved = pureMouseSteer
     ? steerWeighted
-    : applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
+    : onlyPadSteer
+      ? Math.max(-1, Math.min(1, steerWeighted))
+      : applySteerNonlinearity(steerWeighted, STEER_NONLINEAR_EXP);
   const steer = Math.max(-1, Math.min(1, steerCurved));
 
   const pThrottle = padBrake ? 0 : (padForward ? 1 : 0);

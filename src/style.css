@@ -160,6 +160,41 @@
   box-shadow: none;
 }
 
+/* UI táctil vs escritorio: `data-mtr-ui` fijado en JS (ver deviceInputProfile). No uses solo md: */
+.mtr-show-touch-only {
+  display: none;
+}
+
+html[data-mtr-ui='touch'] .mtr-show-touch-only {
+  display: flex;
+}
+
+.mtr-show-desktop-only {
+  display: none;
+}
+
+html[data-mtr-ui='desktop'] .mtr-show-desktop-only {
+  display: flex;
+}
+
+.mtr-hud-speed-wrap {
+  bottom: 7.5rem;
+  right: 0.75rem;
+}
+
+html[data-mtr-ui='desktop'] .mtr-hud-speed-wrap {
+  bottom: 1.5rem;
+  right: 2rem;
+}
+
+.mtr-hud-passenger {
+  bottom: 12rem;
+}
+
+html[data-mtr-ui='desktop'] .mtr-hud-passenger {
+  bottom: 7rem;
+}
+
 /* Mando táctil: solo interactivo cuando el HUD de carrera está visible */
 .mtr-hud-on .mtr-touch-pad {
   pointer-events: auto;
