@@ -76,6 +76,7 @@ import {
 } from './pedestrians';
 import { createParkedCar } from './parkedCar';
 import { addCityscape } from './worldDecor';
+import { ensureLocalFreeProfile, recordFreeModePersonalBestIfBetter } from '../lib/localFreeProfile';
 import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
 import { DriftTrail } from './driftTrail';
 import { createDefaultTurboPickups, updateTurboPickupFloat, type TurboPickupInstance } from './turboPickups';
@@ -212,6 +213,7 @@ export class MotoGame {
   constructor(container: HTMLElement, options?: MotoGameOptions) {
     this.vibeJamAutoStart = options?.vibeJamAutoStart === true;
     this.container = container;
+    ensureLocalFreeProfile();
 
     const initialBike = readStoredBikeStyle();
     this.bikeStyle = initialBike;
@@ -699,7 +701,7 @@ export class MotoGame {
     this.ui.passengerHud.classList.add('hidden');
   }
 
-  /** Aviso PC al primer «Subiendo pasajero…»; solo `md` + puntero fino. */
+  /** Aviso al primer «Subiendo pasajero…»: PC (teclado/ratón) o móvil vertical (girar a horizontal). */
   private hidePcControlsHint(): void {
     if (this.pcControlsHintTimeout !== null) {
       clearTimeout(this.pcControlsHintTimeout);
@@ -708,14 +710,32 @@ export class MotoGame {
     this.ui.pcControlsHint.classList.add('hidden');
   }
 
-  private showPcControlsHintOnDesktopForInitialBoarding(): void {
-    const isDesktopLike =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(min-width: 768px) and (pointer: fine)').matches;
-    if (!isDesktopLike) return;
+  private showSessionStartHintForInitialBoarding(): void {
+    if (typeof window === 'undefined') return;
     this.hidePcControlsHint();
+    const w = window;
+    const mq = (q: string) => w.matchMedia(q).matches;
+    const isDesktopLike = mq('(min-width: 768px) and (pointer: fine)');
+    const hasTouch = 'ontouchstart' in w || w.navigator.maxTouchPoints > 0;
+    const feelsMobile =
+      mq('(max-width: 1023px)') && (mq('(pointer: coarse)') || (mq('(hover: none)') && hasTouch));
+    const inPortrait = mq('(orientation: portrait)');
+
+    const textPc =
+      'Puedes usar el teclado o arrastrar el ratón en el juego para moverte (W, S, A, D, clic sostenido).';
+    const textMobileRotate =
+      'Para más comodidad, gira tu celular al modo horizontal (mando a dos manos).';
+
+    if (isDesktopLike) {
+      this.ui.pcControlsHintText.textContent = textPc;
+    } else if (feelsMobile && inPortrait) {
+      this.ui.pcControlsHintText.textContent = textMobileRotate;
+    } else {
+      return;
+    }
+
     this.ui.pcControlsHint.classList.remove('hidden');
-    this.pcControlsHintTimeout = window.setTimeout(() => {
+    this.pcControlsHintTimeout = w.setTimeout(() => {
       this.pcControlsHintTimeout = null;
       this.ui.pcControlsHint.classList.add('hidden');
     }, 5000);
@@ -775,6 +795,9 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.hidePassengerHud();
     const total = this.finishedRaceMs ?? 0;
+    if (this.sessionGameMode === 'free') {
+      recordFreeModePersonalBestIfBetter(total);
+    }
     this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishTime.textContent = `Tiempo: ${fmtTime(total)}`;
     this.ui.finishOverlay.classList.remove('hidden');
@@ -1129,7 +1152,7 @@ export class MotoGame {
         this.phase = 'boarding';
         this.boardingUntilMs = nowTick + 1600;
         this.showPassengerHud('up', 'Subiendo pasajero…');
-        this.showPcControlsHintOnDesktopForInitialBoarding();
+        this.showSessionStartHintForInitialBoarding();
       }
 
       const canDrive = this.phase === 'racing';

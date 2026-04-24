@@ -1,4 +1,5 @@
 import gsap from 'gsap';
+import { renderSplashFreeLeaderboard } from '../lib/localFreeProfile';
 
 /** Fondo general del splash. */
 const HOME_IMG = '/img/home.jpg';
@@ -80,26 +81,16 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       <aside class="flex w-full max-w-md flex-col gap-3 md:mx-0 md:max-w-none md:pt-2 lg:pt-4">
         <div class="splash-panel overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-950/90 to-black/60 shadow-[0_0_0_1px_rgba(250,204,21,0.06),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
           <div class="flex items-center justify-between border-b border-zinc-800/90 bg-zinc-900/50 px-3 py-2.5">
-            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/95">Tiempos demo</span>
-            <span class="rounded border border-zinc-700/80 bg-zinc-950/80 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">Ref.</span>
+            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/95">Modo libre</span>
+            <span class="rounded border border-zinc-700/80 bg-zinc-950/80 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">Local</span>
           </div>
           <div class="grid grid-cols-[2rem_1fr_auto] gap-x-2 border-b border-zinc-800/50 px-3 py-1.5 text-[8px] font-bold uppercase tracking-wider text-zinc-500">
             <span>#</span>
             <span>Piloto</span>
             <span class="text-right">Crono</span>
           </div>
-          <ol class="text-[11px]">
-            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 border-b border-zinc-800/40 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
-              <span class="font-mono text-amber-400">01</span><span class="min-w-0 truncate font-medium">NEON_DRIFTER</span><span class="shrink-0 text-right font-mono text-zinc-400 tabular-nums">1:42.08</span>
-            </li>
-            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 border-b border-zinc-800/40 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
-              <span class="font-mono text-zinc-500">02</span><span class="min-w-0 truncate">LIMA_NIGHT</span><span class="shrink-0 text-right font-mono text-zinc-500 tabular-nums">1:44.51</span>
-            </li>
-            <li class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-2 px-3 py-2.5 text-zinc-200 transition hover:bg-amber-500/[0.04]">
-              <span class="font-mono text-zinc-500">03</span><span class="min-w-0 truncate">TUK_MASTER</span><span class="shrink-0 text-right font-mono text-zinc-500 tabular-nums">1:47.22</span>
-            </li>
-          </ol>
-          <p class="border-t border-zinc-800/50 bg-zinc-950/40 px-2 py-1.5 text-center text-[8px] text-zinc-500">Ranking con Supabase al acabar (ruta: Pupy → Papá → Casa)</p>
+          <ol data-splash-free-leaderboard class="text-[11px]"></ol>
+          <p class="border-t border-zinc-800/50 bg-zinc-950/40 px-2 py-1.5 text-center text-[8px] leading-snug text-zinc-500">Tu apodo y tu mejor <span class="text-zinc-400">carrera libre</span> se guardan solo en este dispositivo (sin cuenta). Con Supabase: ranking global al acabar, si hay servidor.</p>
         </div>
         <div class="splash-panel flex gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-2">
           <div class="min-w-0 flex-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 px-2 py-1.5">
@@ -145,6 +136,11 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
   `;
 
   host.appendChild(root);
+
+  const leaderboardOl = root.querySelector<HTMLOListElement>('[data-splash-free-leaderboard]');
+  if (leaderboardOl) {
+    renderSplashFreeLeaderboard(leaderboardOl);
+  }
 
   const motoHero = root.querySelector<HTMLImageElement>('[data-splash-moto-hero]');
   if (motoHero) {

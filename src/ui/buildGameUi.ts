@@ -52,8 +52,12 @@ export type GameUiRefs = {
   passengerHud: HTMLElement;
   passengerLabel: HTMLElement;
   passengerArrow: HTMLElement;
-  /** Aviso PC (teclado / ratón) al arrancar; se muestra 5s desde `MotoGame`. */
+  /**
+   * Aviso al arrancar (mismo cajón, 5s): texto de PC o, en móvil vertical, sugerir girar a horizontal.
+   * Contenido: `pcControlsHintText`.
+   */
   pcControlsHint: HTMLElement;
+  pcControlsHintText: HTMLElement;
 };
 
 function iconForStop(index: 0 | 1 | 2, state: 'done' | 'current' | 'pending'): string {
@@ -411,17 +415,18 @@ export function buildGameUi(
   passengerHud.append(passengerInner);
 
   const pcControlsHint = document.createElement('div');
-  pcControlsHint.dataset.role = 'pc-controls-hint';
+  pcControlsHint.dataset.role = 'session-start-hint';
   pcControlsHint.setAttribute('role', 'status');
   pcControlsHint.setAttribute('aria-live', 'polite');
   pcControlsHint.className =
-    'mtr-pc-control-hint pointer-events-none fixed left-1/2 top-[min(28%,8rem)] z-30 flex hidden w-[min(92vw,22rem)] -translate-x-1/2 flex-col items-center sm:top-[min(32%,7.5rem)] sm:w-96';
-  const pcControlsHintBox = document.createElement('p');
-  pcControlsHintBox.className =
+    'mtr-pc-control-hint mtr-session-start-hint pointer-events-none fixed left-1/2 top-[min(28%,8rem)] z-30 flex hidden w-[min(92vw,22rem)] -translate-x-1/2 flex-col items-center sm:top-[min(32%,7.5rem)] sm:w-96';
+  const pcControlsHintText = document.createElement('p');
+  pcControlsHintText.dataset.role = 'session-hint-text';
+  pcControlsHintText.className =
     'w-full rounded-2xl border-2 border-amber-400/90 bg-zinc-950/98 px-4 py-4 text-center text-[0.85rem] font-semibold leading-relaxed text-amber-50 shadow-[0_0_0_1px_rgba(0,0,0,0.4),0_20px_50px_rgba(0,0,0,0.65),0_0_40px_rgba(245,158,11,0.2)] sm:px-5 sm:py-4 sm:text-base';
-  pcControlsHintBox.textContent =
+  pcControlsHintText.textContent =
     'Puedes usar el teclado o arrastrar el ratón en el juego para moverte (W, S, A, D, clic sostenido).';
-  pcControlsHint.append(pcControlsHintBox);
+  pcControlsHint.append(pcControlsHintText);
   hudRoot.append(pcControlsHint, passengerHud);
 
   container.appendChild(hudRoot);
@@ -691,5 +696,6 @@ export function buildGameUi(
     passengerLabel,
     passengerArrow,
     pcControlsHint,
+    pcControlsHintText,
   };
 }
