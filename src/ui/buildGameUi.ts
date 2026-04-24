@@ -348,7 +348,7 @@ export function buildGameUi(
   btnTilt.setAttribute('aria-pressed', 'false');
   btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar con el botón de gas a la derecha)');
   btnTilt.className =
-    'mtr-touch-tilt pointer-events-auto w-full max-w-[8.5rem] shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-none tracking-wide text-zinc-400 transition-colors landscape:max-w-full landscape:px-2';
+    'mtr-touch-tilt pointer-events-auto w-full max-w-full shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-tight tracking-wide text-zinc-400 transition-colors';
   btnTilt.textContent = 'Giro off';
 
   const touchRow = document.createElement('div');
@@ -357,13 +357,9 @@ export function buildGameUi(
 
   const touchColLeft = document.createElement('div');
   touchColLeft.className =
-    'mtr-touch-cluster-left flex min-h-0 min-w-0 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1 ' +
-    'portrait:w-max portrait:max-w-[min(4.4rem,32vw)] portrait:flex-none ' +
-    'landscape:min-w-0 landscape:max-w-[48%] landscape:flex-1';
+    'mtr-touch-cluster-left flex min-h-0 min-w-0 flex-col items-stretch justify-end gap-1.5 self-end pl-0.5 sm:pl-1';
   const steerRow = document.createElement('div');
-  steerRow.className =
-    'mtr-steer-pair flex flex-col items-stretch justify-end gap-1.5 sm:portrait:gap-2 ' +
-    'landscape:flex-row landscape:flex-wrap landscape:items-end landscape:justify-start landscape:gap-2 sm:landscape:gap-2.5';
+  steerRow.className = 'mtr-steer-pair';
   steerRow.append(btnTouchLeft, btnTouchRight);
   touchColLeft.append(btnTilt, steerRow);
 

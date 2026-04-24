@@ -230,6 +230,57 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12);
 }
 
+/*
+ * Controles en vertical vs apaisado: reglas fijas por orientation (no solo utilidades Tailwind).
+ * En vertical: ←/→ apilados; botón Giro al ancho del bloque.
+ */
+@media (orientation: portrait) {
+  .mtr-touch-pad .mtr-touch-cluster-left {
+    max-width: min(5.75rem, 40vw);
+    width: max-content;
+    flex: 0 0 auto;
+  }
+
+  .mtr-touch-pad .mtr-steer-pair {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 0.4rem;
+  }
+
+  .mtr-touch-pad .mtr-touch-tilt {
+    max-width: 100%;
+    box-sizing: border-box;
+    align-self: stretch;
+    text-align: center;
+    line-height: 1.2;
+  }
+}
+
+@media (orientation: landscape) {
+  .mtr-touch-pad .mtr-touch-cluster-left {
+    min-width: 0;
+    max-width: 48%;
+    flex: 1 1 0%;
+  }
+
+  .mtr-touch-pad .mtr-steer-pair {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .mtr-touch-pad .mtr-touch-tilt {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 /* Teclas del panel de controles (splash) */
 .mtr-splash-kbd {
   user-select: none;
