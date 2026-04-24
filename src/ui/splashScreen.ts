@@ -29,11 +29,11 @@ const icDevice = `<svg class="h-4 w-4 text-cyan-400/80" fill="none" stroke="curr
  */
 export function mountSplashScreen(host: HTMLElement, onComplete: () => void): void {
   host.textContent = '';
-  host.classList.add('relative', 'h-full', 'min-h-dvh', 'w-full', 'overflow-hidden', 'bg-black');
+  host.classList.add('relative', 'min-h-dvh', 'w-full', 'overflow-x-hidden', 'bg-black');
 
   const root = document.createElement('div');
   root.className =
-    'splash-root fixed inset-0 z-[200] flex flex-col text-zinc-100 overflow-x-hidden overflow-y-auto';
+    'splash-root relative z-[200] flex min-h-dvh w-full flex-col text-zinc-100 overflow-x-hidden';
 
   root.innerHTML = `
     <div class="splash-bg absolute inset-0 -z-20 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')" aria-hidden="true"></div>
@@ -58,7 +58,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       </div>
     </header>
 
-    <div class="grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_minmax(0,240px)] md:gap-6 md:p-6 lg:px-10">
+    <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_minmax(0,240px)] md:gap-6 md:p-6 lg:px-10">
       <main class="flex flex-col items-center justify-center gap-6 py-6 md:py-10">
         <h1 class="splash-title text-center text-3xl font-black italic tracking-tighter text-yellow-400 drop-shadow-[0_0_24px_rgba(250,204,21,0.45)] sm:text-5xl md:text-6xl lg:text-7xl">
           MOTOTAXI<br class="sm:hidden" /><span class="hidden sm:inline"> </span>RUNNER

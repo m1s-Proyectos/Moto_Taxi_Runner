@@ -113,8 +113,11 @@ export function buildGameUi(
 ): GameUiRefs {
   container.classList.add(
     'relative',
-    'h-full',
+    'h-dvh',
+    'min-h-0',
     'w-full',
+    'max-w-full',
+    'shrink-0',
     'overflow-hidden',
     'bg-zinc-950',
     'font-sans',
@@ -348,7 +351,7 @@ export function buildGameUi(
   btnTilt.setAttribute('aria-pressed', 'false');
   btnTilt.setAttribute('aria-label', 'Giro: inclinando el teléfono a los lados (acelerar con el botón de gas a la derecha)');
   btnTilt.className =
-    'mtr-touch-tilt pointer-events-auto w-full max-w-full shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-tight tracking-wide text-zinc-400 transition-colors';
+    'mtr-touch-tilt pointer-events-auto w-auto max-w-full shrink-0 touch-manipulation select-none rounded-full border border-zinc-600/80 bg-zinc-900/90 px-2.5 py-1.5 text-[9px] font-bold uppercase leading-tight tracking-wide text-zinc-400 transition-colors';
   btnTilt.textContent = 'Giro off';
 
   const touchRow = document.createElement('div');
@@ -432,14 +435,14 @@ export function buildGameUi(
 
   const menuOverlay = document.createElement('div');
   menuOverlay.className =
-    'fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-zinc-950/65 p-4 backdrop-blur-md';
+    'mtr-menu-overlay fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overflow-x-hidden bg-zinc-950/65 p-3 py-4 backdrop-blur-md sm:items-center sm:p-4';
   menuOverlay.innerHTML = `
     <div class="pointer-events-none absolute inset-0 mtr-menu-ambient" aria-hidden="true"></div>
     <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgb(9_9_11/0.72)_100%)]" aria-hidden="true"></div>
     <div class="pointer-events-none absolute inset-0 mtr-menu-scanline" aria-hidden="true"></div>
-    <div class="relative z-10 flex w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-amber-500/20 bg-zinc-900/94 shadow-[0_0_0_1px_rgb(39_39_42/0.8),0_25px_60px_-12px_rgb(0_0_0/0.75),0_0_80px_-20px_rgb(245_158_11/0.18)] backdrop-blur-xl">
+    <div class="mtr-menu-card relative z-10 my-auto flex w-full max-w-[440px] min-h-0 max-h-[min(100dvh,100vh)] flex-col overflow-hidden rounded-2xl border border-amber-500/20 bg-zinc-900/94 shadow-[0_0_0_1px_rgb(39_39_42/0.8),0_25px_60px_-12px_rgb(0_0_0/0.75),0_0_80px_-20px_rgb(245_158_11/0.18)] backdrop-blur-xl">
       <div class="mtr-card-accent-line pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" aria-hidden="true"></div>
-      <div class="relative flex items-start justify-between border-b border-zinc-800/50 bg-gradient-to-b from-zinc-800/25 to-zinc-900/40 px-6 py-5">
+      <div class="relative flex shrink-0 items-start justify-between border-b border-zinc-800/50 bg-gradient-to-b from-zinc-800/25 to-zinc-900/40 px-6 py-5">
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
             <h1 class="mtr-menu-title text-2xl font-black tracking-[0.42em]">MTR</h1>
@@ -452,12 +455,12 @@ export function buildGameUi(
           Local
         </span>
       </div>
-      <div class="border-b border-zinc-800/40 bg-zinc-950/20 px-6 py-2.5" data-role="back-home-row">
+      <div class="shrink-0 border-b border-zinc-800/40 bg-zinc-950/20 px-6 py-2.5" data-role="back-home-row">
         <button type="button" data-role="back-home" class="group inline-flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs font-semibold text-zinc-500 transition-all hover:bg-zinc-800/50 hover:text-amber-400 hover:shadow-[0_0_12px_-4px_rgb(245_158_11/0.35)]">
           <span aria-hidden="true" class="transition-transform group-hover:-translate-x-0.5">←</span> Volver a inicio
         </button>
       </div>
-      <div class="p-6">
+      <div class="mtr-menu-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-6 [scrollbar-gutter:stable]">
         <div class="relative mb-6 flex items-center rounded-xl border border-zinc-800/70 bg-zinc-950/70 p-1 shadow-inner shadow-black/30">
           <button type="button" data-mode="practice" class="relative z-10 flex-1 rounded-lg py-2 text-xs font-semibold transition-colors duration-300">Práctica</button>
           <button type="button" data-mode="multi" class="relative z-10 flex-1 rounded-lg py-2 text-xs font-semibold transition-colors duration-300">Multijugador</button>
@@ -525,7 +528,7 @@ export function buildGameUi(
           </div>
         </div>
       </div>
-      <div class="border-t border-zinc-800/40 bg-zinc-950/25 p-6 pt-4">
+      <div class="shrink-0 border-t border-zinc-800/40 bg-zinc-950/25 p-6 pt-4">
         <button type="button" data-role="start" class="mtr-start-cta group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-b from-amber-100 to-amber-200 py-4 pl-4 pr-5 text-sm font-bold tracking-wide text-zinc-950 transition-all hover:from-white hover:to-amber-100 hover:brightness-[1.03] disabled:animate-none disabled:shadow-none">
           <span class="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/55 to-transparent opacity-0 transition-opacity group-hover:opacity-100 group-hover:[animation:mtr-shimmer_1.2s_ease-in-out_infinite]"></span>
           <span data-role="start-label" class="relative">Arrancar Motor</span>
@@ -538,9 +541,9 @@ export function buildGameUi(
 
   const finishOverlay = document.createElement('div');
   finishOverlay.className =
-    'fixed inset-0 z-[60] flex hidden items-center justify-center bg-zinc-950/55 p-4 backdrop-blur-sm';
+    'mtr-finish-overlay fixed inset-0 z-[60] flex hidden items-start justify-center overflow-y-auto overflow-x-hidden bg-zinc-950/55 p-3 py-4 backdrop-blur-sm sm:items-center sm:p-4';
   finishOverlay.innerHTML = `
-    <div class="w-full max-w-[420px] rounded-2xl border border-zinc-800/80 bg-zinc-900/95 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl" role="dialog" aria-modal="true" aria-label="Resultado">
+    <div class="my-auto w-full max-w-[420px] max-h-[min(100dvh,100svh)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-zinc-800/80 bg-zinc-900/95 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl [scrollbar-gutter:stable]" role="dialog" aria-modal="true" aria-label="Resultado">
       <h2 data-role="finish-title" class="text-xl font-semibold tracking-tight text-zinc-50">¡Llegaste!</h2>
       <p data-role="finish-time" class="mt-3 font-mono text-lg text-amber-400/95">Tiempo: 0:00.00</p>
       <p data-role="finish-cloud" class="mt-2 hidden min-h-[1.25rem] text-xs text-zinc-500" aria-live="polite"></p>

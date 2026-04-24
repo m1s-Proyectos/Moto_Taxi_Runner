@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Cuerpo: barra de desplazamiento vertical cuando el contenido no cabe (splash, menú, ventanas bajas). */
+.mtr-app-body {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Solo subset latin (~un woff2). Evita cirílico, griego, vietnamita y latin-ext del paquete completo. */
 @font-face {
   font-family: 'Inter Variable';
@@ -230,11 +235,70 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12);
 }
 
-/*
- * Controles en vertical vs apaisado: reglas fijas por orientation (no solo utilidades Tailwind).
- * En vertical: ←/→ apilados; botón Giro al ancho del bloque.
- */
-@media (orientation: portrait) {
+/* Base: fila; `data-mtr-aspect` o media ajusta columna/ fila. Giro: pastilla, no 100% del panel ancho. */
+.mtr-touch-pad .mtr-steer-pair {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.mtr-touch-pad .mtr-touch-tilt {
+  width: auto;
+  max-width: 6.75rem;
+  align-self: center;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* JS: ancho<alto del visualViewport; siempre al cambiar giro/resize */
+html[data-mtr-aspect='tall'] .mtr-touch-pad .mtr-touch-cluster-left {
+  max-width: min(5.75rem, 40vw);
+  width: max-content;
+  flex: 0 0 auto;
+}
+
+html[data-mtr-aspect='tall'] .mtr-touch-pad .mtr-steer-pair {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+html[data-mtr-aspect='tall'] .mtr-touch-pad .mtr-touch-tilt {
+  max-width: 100%;
+  align-self: stretch;
+  white-space: nowrap;
+}
+
+html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-cluster-left {
+  min-width: 0;
+  max-width: 48%;
+  flex: 1 1 0%;
+}
+
+html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-steer-pair {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+html[data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-tilt {
+  max-width: 6.75rem;
+  width: auto;
+  align-self: center;
+  white-space: nowrap;
+}
+
+/* Respaldo si `data-mtr-aspect` aún no aplica: ratio del layout viewport (no `orientation` solo) */
+@media (max-aspect-ratio: 1/1) {
   .mtr-touch-pad .mtr-touch-cluster-left {
     max-width: min(5.75rem, 40vw);
     width: max-content;
@@ -242,7 +306,6 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   }
 
   .mtr-touch-pad .mtr-steer-pair {
-    display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
@@ -252,14 +315,12 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
 
   .mtr-touch-pad .mtr-touch-tilt {
     max-width: 100%;
-    box-sizing: border-box;
     align-self: stretch;
-    text-align: center;
-    line-height: 1.2;
+    white-space: nowrap;
   }
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 1/1) {
   .mtr-touch-pad .mtr-touch-cluster-left {
     min-width: 0;
     max-width: 48%;
@@ -267,7 +328,6 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   }
 
   .mtr-touch-pad .mtr-steer-pair {
-    display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: flex-end;
@@ -276,8 +336,9 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   }
 
   .mtr-touch-pad .mtr-touch-tilt {
-    max-width: none;
-    width: 100%;
+    max-width: 6.75rem;
+    width: auto;
+    align-self: center;
   }
 }
 

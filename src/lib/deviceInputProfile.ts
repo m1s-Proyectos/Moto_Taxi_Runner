@@ -61,7 +61,20 @@ function isTouchPrimaryDevice(): boolean {
 }
 
 /**
+ * Viewport (visualViewport) con ancho menor que alto: `tall`. Alinea mando L/R; más fiable que solo `orientation` en algunos WebViews.
+ */
+function applyLayoutAspect(): void {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return;
+  }
+  const w = window.visualViewport?.width ?? window.innerWidth;
+  const h = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.dataset.mtrAspect = w < h ? 'tall' : 'wide';
+}
+
+/**
  * Sincroniza `document.documentElement.dataset.mtrUi` en `touch` o `desktop` (CSS y layout).
+ * También `data-mtr-aspect` (`tall` | `wide`) para mando y HUD táctil.
  * Ejecutar al arrancar la app; opcionalmente al cambiar de pantalla o reconectar.
  */
 export function initDeviceInputProfile(): void {
@@ -71,9 +84,16 @@ export function initDeviceInputProfile(): void {
   const apply = (): void => {
     document.documentElement.dataset.mtrUi = getUseMobileGameUi() ? 'touch' : 'desktop';
   };
-  apply();
-  window.addEventListener('resize', apply);
+  const applyAll = (): void => {
+    applyLayoutAspect();
+    apply();
+  };
+  applyAll();
+  window.addEventListener('resize', applyAll);
   window.addEventListener('orientationchange', () => {
-    window.setTimeout(apply, 80);
+    window.setTimeout(applyAll, 80);
   });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', applyAll);
+  }
 }
