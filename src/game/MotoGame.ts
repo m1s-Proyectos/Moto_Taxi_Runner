@@ -1096,7 +1096,7 @@ export class MotoGame {
           PHYS.steerHigh,
           speedFactor,
         );
-        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, 0.15);
+        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, 0.24);
         this.bike.rotation.y -= this.currentSteer * steerStrength * dt;
       } else {
         this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, 0, 0.22);
@@ -1206,7 +1206,7 @@ export class MotoGame {
       const yawNow = this.bike.rotation.y;
       const yawRate = (yawNow - this.bikeDriftLastYaw) / Math.max(1e-4, dt);
       const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
-      const steerAbs = Math.abs(steerInput);
+      const steerAbs = Math.abs(this.currentSteer);
       const fromSteer = steerAbs * speedNorm * 0.64;
       const fromTurn = Math.min(1, Math.abs(yawRate) * 0.5) * speedNorm;
       const driftI = Math.min(1, fromSteer * 0.6 + fromTurn * 0.5);
@@ -1215,7 +1215,7 @@ export class MotoGame {
       if (isDrift) {
         const turnSign =
           steerAbs > 0.04
-            ? Math.sign(steerInput)
+            ? Math.sign(this.currentSteer)
             : Math.abs(yawRate) > 0.07
               ? -Math.sign(yawRate)
               : 0;

@@ -46,11 +46,14 @@ const TILT_SMOOTH = 0.12;
 
 const W_STEER_KEY = 0.85;
 const W_STEER_PAD = 1.0;
-const W_STEER_POINTER = 0.75;
-const W_STEER_MOUSE = 0.65;
+const W_STEER_POINTER = 0.8;
+const W_STEER_MOUSE = 0.95;
 const W_STEER_TILT = 0.6;
 const W_STEER_TILT_WITH_POINTER = 0.25;
-const STEER_NONLINEAR_EXP = 1.4;
+/** Curva global un poco más lineal: el exp alto hacía el giro “lento” en PC (ratón / puntero). */
+const STEER_NONLINEAR_EXP = 1.18;
+/** (nx-0.5) * escala → -1..1: más ancho hace el giro más reactivo con el cursor. */
+const CANVAS_X_STEER_MULT = 3.2;
 
 function readSteerKeys(): number {
   let s = 0;
@@ -89,7 +92,7 @@ export function attachPointerDriver(el: HTMLElement): () => void {
     const r = el.getBoundingClientRect();
     if (r.width < 8) return;
     const nx = (e.clientX - r.left) / r.width;
-    pointerSteer = Math.max(-1, Math.min(1, (nx - 0.5) * 2.4));
+    pointerSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
   };
 
   const onDown = (e: PointerEvent) => {
@@ -286,7 +289,7 @@ export function attachMouseAim(el: HTMLElement): () => void {
     const r = el.getBoundingClientRect();
     if (r.width < 8) return;
     const nx = (e.clientX - r.left) / r.width;
-    mouseAimSteer = Math.max(-1, Math.min(1, (nx - 0.5) * 2.4));
+    mouseAimSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
     useMouseAim = true;
   };
   const onEnter = () => {

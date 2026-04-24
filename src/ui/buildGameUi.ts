@@ -298,7 +298,7 @@ export function buildGameUi(
   btnTouchLeft.dataset.role = 'touch-left';
   btnTouchLeft.setAttribute('aria-label', 'Girar a la izquierda');
   btnTouchLeft.className =
-    'mtr-touch-btn flex h-[3.25rem] w-[3.6rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-zinc-600/80 bg-zinc-900/95 text-zinc-100 shadow-md shadow-black/30 transition-transform active:scale-[0.97] sm:h-14 sm:w-16';
+    'mtr-touch-btn mtr-touch-side flex h-[3.6rem] w-[4rem] min-h-[3.5rem] min-w-[3.5rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-zinc-600/80 bg-zinc-900/95 text-zinc-100 shadow-md shadow-black/30 transition-transform active:scale-[0.97] sm:h-[3.75rem] sm:min-h-[3.75rem] sm:w-[4.5rem] sm:min-w-[4.25rem]';
   btnTouchLeft.innerHTML = arrowLeft;
 
   const btnTouchForward = document.createElement('button');
@@ -327,8 +327,17 @@ export function buildGameUi(
 
   const touchRow = document.createElement('div');
   touchRow.className =
-    'mx-auto flex w-full max-w-[min(100vw,20rem)] items-end justify-center gap-1.5 px-2 sm:max-w-sm sm:gap-2 sm:px-3';
-  touchRow.append(btnTilt, btnTouchLeft, btnTouchForward, btnTouchRight);
+    'mtr-touch-bar mx-auto flex w-full max-w-[100vw] items-end justify-between gap-0 px-1 pl-[max(0.35rem,env(safe-area-inset-left))] pr-[max(0.35rem,env(safe-area-inset-right))] sm:px-2';
+  const touchColLeft = document.createElement('div');
+  touchColLeft.className = 'flex min-w-0 max-w-[38%] flex-1 justify-start self-end';
+  const touchColCenter = document.createElement('div');
+  touchColCenter.className = 'mtr-touch-center -mt-0.5 flex max-w-[34%] shrink-0 flex-col items-center justify-end gap-1.5 self-end px-0.5';
+  const touchColRight = document.createElement('div');
+  touchColRight.className = 'flex min-w-0 max-w-[38%] flex-1 justify-end self-end';
+  touchColLeft.append(btnTouchLeft);
+  touchColCenter.append(btnTilt, btnTouchForward);
+  touchColRight.append(btnTouchRight);
+  touchRow.append(touchColLeft, touchColCenter, touchColRight);
 
   const touchDetails = document.createElement('details');
   touchDetails.className = 'mx-auto mt-0.5 w-full max-w-sm px-3 text-center';
@@ -340,7 +349,7 @@ export function buildGameUi(
   tipP.className =
     'pt-0.5 pb-1 text-left text-[9px] leading-relaxed text-zinc-500 sm:text-[10px]';
   tipP.textContent =
-    'Acelera con la flecha central. Activa Giro y mantén el teléfono como al activar: de ahí, inclinar a lados = gira (permiso de movimiento en iPhone). Doble toque en Giro = recalibrar. Los botones de giro y el Giro se pueden combinar. Freno: S / flecha abajo.';
+    'Flecha central = gas. ← y → a los bordes (cerca de cada pulgar). Giro por inclinación solo en móvil (no en PC). Giro = calibrar al activar; doble toque = recalibrar. Más teclas: S / ↓ freno. Botones y Giro se pueden combinar.';
 
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
