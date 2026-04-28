@@ -31,11 +31,12 @@ const icDevice = `<svg class="h-4 w-4 text-cyan-400/80" fill="none" stroke="curr
  */
 export function mountSplashScreen(host: HTMLElement, onComplete: () => void): void {
   host.textContent = '';
-  host.classList.add('relative', 'min-h-dvh', 'w-full', 'overflow-x-hidden', 'bg-black');
+  // overflow-y-auto permite scroll vertical; overflow-x-hidden solo corta lo horizontal.
+  host.classList.add('relative', 'min-h-dvh', 'w-full', 'overflow-x-hidden', 'overflow-y-auto', 'bg-black');
 
   const root = document.createElement('div');
   root.className =
-    'splash-root relative z-[200] flex min-h-dvh w-full flex-col text-zinc-100 overflow-x-hidden';
+    'splash-root relative z-[200] flex min-h-dvh w-full flex-col text-zinc-100 overflow-x-hidden scroll-smooth';
 
   root.innerHTML = `
     <div class="splash-bg absolute inset-0 -z-30 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')" aria-hidden="true"></div>
@@ -51,27 +52,27 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
     <div class="splash-streak pointer-events-none absolute -left-20 top-[30%] z-[3] h-[2px] w-[36vw] rotate-[-11deg] bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
     <div class="splash-streak pointer-events-none absolute right-[-8vw] top-[52%] z-[3] h-[3px] w-[30vw] rotate-[-16deg] bg-gradient-to-r from-transparent via-amber-300/80 to-transparent"></div>
 
-    <header class="splash-panel flex shrink-0 items-center justify-between gap-4 border-b border-cyan-300/20 bg-slate-950/45 px-4 py-3 backdrop-blur-xl md:px-8">
+    <header class="splash-panel sticky top-0 z-50 flex shrink-0 items-center justify-between gap-4 border-b border-cyan-300/20 bg-slate-950/75 px-4 py-3 backdrop-blur-xl md:px-8">
       <div class="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1">
         <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.95)]"></span>
         <span class="text-[10px] font-extrabold uppercase tracking-[0.23em] text-cyan-100">Arcade Build</span>
       </div>
-      <nav class="hidden items-center gap-8 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300/70 md:flex">
-        <span class="cursor-default border-b border-amber-300 pb-0.5 text-amber-200">City Rush</span>
-        <span class="cursor-default hover:text-white">Garage</span>
-        <span class="cursor-default hover:text-white">Ranking</span>
+      <nav class="flex items-center gap-5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300/70 md:gap-8">
+        <a href="#splash-hero" class="cursor-pointer border-b border-amber-300 pb-0.5 text-amber-200 transition-colors hover:text-amber-100">City Rush</a>
+        <a href="#splash-ranking" class="cursor-pointer transition-colors hover:text-white">Ranking</a>
+        <a href="#splash-controles" class="cursor-pointer transition-colors hover:text-white">Controles</a>
       </nav>
       <div class="rounded-full border border-amber-300/45 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">vibe jam</div>
     </header>
 
-    <div class="grid grid-cols-1 gap-5 px-4 py-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-6 md:px-8 lg:px-12">
-      <main class="relative flex min-h-[360px] flex-col justify-between gap-5 md:min-h-[520px]">
+    <div id="splash-hero" class="grid grid-cols-1 gap-4 px-3 py-4 sm:px-4 sm:py-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-6 md:px-8 lg:px-12">
+      <main class="relative order-2 flex flex-col justify-between gap-4 md:order-1 md:min-h-[520px]">
         <div class="splash-panel max-w-[36rem] rounded-3xl border border-cyan-300/30 bg-slate-900/35 p-5 shadow-[0_0_0_1px_rgba(103,232,249,0.14),0_24px_45px_rgba(2,6,23,0.45)] backdrop-blur-2xl">
           <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-300/45 bg-amber-300/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">
             ${icBolt}
             Nitro District
           </div>
-          <h1 class="splash-title text-[2.2rem] font-black uppercase leading-[0.9] tracking-[-0.02em] text-white sm:text-[3.2rem] md:text-[4rem]">
+          <h1 class="splash-title text-[1.8rem] font-black uppercase leading-[0.9] tracking-[-0.02em] text-white sm:text-[3.2rem] md:text-[4rem]">
             <span class="block bg-gradient-to-r from-white via-amber-100 to-amber-300 bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(253,224,71,0.4)]">MotoTaxi</span>
             <span class="block bg-gradient-to-r from-cyan-200 via-sky-300 to-fuchsia-300 bg-clip-text text-transparent drop-shadow-[0_0_28px_rgba(34,211,238,0.42)]">Runner</span>
           </h1>
@@ -92,25 +93,41 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
         </div>
       </main>
 
-      <section class="relative flex flex-col gap-3 md:pt-4">
-        <div class="splash-hero relative overflow-hidden rounded-[1.8rem] border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)]">
+      <section class="relative order-1 flex flex-col gap-3 md:order-2 md:pt-4">
+        <div class="splash-hero relative overflow-hidden rounded-2xl border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)] sm:rounded-[1.8rem]">
           <div class="pointer-events-none absolute inset-0 z-[1] [background:radial-gradient(circle_at_75%_24%,rgba(250,204,21,0.24),transparent_35%),radial-gradient(circle_at_18%_40%,rgba(56,189,248,0.24),transparent_42%),linear-gradient(145deg,rgba(8,47,73,0.44),rgba(30,41,59,0.55))]"></div>
           <div class="pointer-events-none absolute inset-0 z-[2] [background:repeating-linear-gradient(105deg,rgba(255,255,255,0.06)_0,rgba(255,255,255,0.06)_1px,transparent_1px,transparent_14px)]"></div>
-          <div class="relative z-[3] aspect-[16/11] min-h-[340px]">
-            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-36 blur-sm [filter:saturate(1.22)_brightness(0.94)]" decoding="async" />
-            <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,rgba(2,6,23,0.7)_0%,rgba(2,6,23,0.2)_34%,rgba(2,6,23,0.72)_100%)]"></div>
+
+          <!-- Contenedor de imagen: altura adaptativa según pantalla -->
+          <div class="relative z-[3] flex min-h-[52vw] w-full items-center justify-center sm:min-h-[300px] md:min-h-[340px] lg:aspect-[16/11] lg:min-h-0">
+            <!-- Fondo borroso (no scale, no recorte) -->
+            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
+              class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-32 blur-sm [filter:saturate(1.22)_brightness(0.88)]"
+              decoding="async" />
+            <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,rgba(2,6,23,0.68)_0%,rgba(2,6,23,0.18)_34%,rgba(2,6,23,0.70)_100%)]"></div>
             <div class="pointer-events-none absolute inset-y-[28%] left-[-12%] h-[2px] w-[56%] rotate-[-9deg] bg-gradient-to-r from-transparent via-cyan-200/80 to-transparent"></div>
             <div class="pointer-events-none absolute inset-y-[56%] right-[-10%] h-[3px] w-[44%] rotate-[-14deg] bg-gradient-to-r from-transparent via-amber-200/80 to-transparent"></div>
-            <div class="relative flex h-full w-full items-center justify-center p-3 sm:p-4">
-              <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi" class="block max-h-full max-w-full rounded-[1.2rem] [filter:drop-shadow(0_18px_32px_rgba(0,0,0,0.62))_saturate(1.18)_contrast(1.12)]" decoding="async" />
+
+            <!-- Imagen principal: object-contain garantiza que nunca se recorta -->
+            <div class="relative flex h-full w-full items-center justify-center p-3 sm:p-5">
+              <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi"
+                class="block h-auto w-auto max-h-[48vw] max-w-[88%] rounded-xl object-contain sm:max-h-[260px] sm:max-w-[80%] sm:rounded-[1.2rem] md:max-h-[300px] lg:max-h-full lg:max-w-full
+                       [filter:drop-shadow(0_14px_28px_rgba(0,0,0,0.65))_saturate(1.18)_contrast(1.1)]"
+                decoding="async" />
             </div>
-            <div class="pointer-events-none absolute bottom-4 left-4 rounded-full border border-cyan-200/55 bg-cyan-200/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-50">Speed FX</div>
-            <div class="pointer-events-none absolute bottom-4 right-4 rounded-full border border-amber-200/55 bg-amber-200/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-amber-50">Nitro Glow</div>
+
+            <div class="pointer-events-none absolute bottom-3 left-3 rounded-full border border-cyan-200/55 bg-cyan-200/12 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-cyan-50 sm:bottom-4 sm:left-4 sm:px-2.5 sm:py-1 sm:text-[9px]">Speed FX</div>
+            <div class="pointer-events-none absolute bottom-3 right-3 rounded-full border border-amber-200/55 bg-amber-200/12 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-amber-50 sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[9px]">Nitro Glow</div>
           </div>
-          <div class="relative z-[4] flex justify-center overflow-hidden border-t border-white/12 px-5 py-4">
-            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-25 blur-md [filter:saturate(1.25)_brightness(0.82)]" decoding="async" />
+
+          <!-- Área del botón CTA -->
+          <div class="relative z-[4] flex justify-center overflow-hidden border-t border-white/12 px-4 py-3 sm:px-5 sm:py-4">
+            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
+              class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-22 blur-md [filter:saturate(1.25)_brightness(0.80)]"
+              decoding="async" />
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/45 via-slate-900/25 to-slate-900/60"></div>
-            <button type="button" data-splash-start class="splash-cta relative z-[1] group flex items-center gap-2 rounded-xl border-2 border-amber-300 bg-gradient-to-b from-amber-300 to-orange-400 px-8 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_0_35px_rgba(251,191,36,0.55)] transition hover:scale-[1.02] hover:shadow-[0_0_45px_rgba(251,191,36,0.7)] active:scale-[0.98]">
+            <button type="button" data-splash-start
+              class="splash-cta relative z-[1] group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-300 bg-gradient-to-b from-amber-300 to-orange-400 px-6 py-3.5 text-sm font-black uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_30px_rgba(251,191,36,0.5)] transition active:scale-[0.97] sm:w-auto sm:px-8 sm:py-3 sm:text-sm sm:tracking-[0.2em]">
               ${icBolt}
               Iniciar carrera
             </button>
@@ -119,7 +136,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       </section>
     </div>
 
-    <div class="grid grid-cols-1 gap-3 px-4 pb-2 md:grid-cols-[1.2fr_0.8fr] md:px-8 lg:px-12">
+    <div id="splash-ranking" class="grid grid-cols-1 gap-3 px-4 pb-2 md:grid-cols-[1.2fr_0.8fr] md:px-8 lg:px-12">
       <div class="splash-panel overflow-hidden rounded-2xl border border-slate-200/15 bg-slate-950/48 shadow-[0_0_0_1px_rgba(148,163,184,0.15)] backdrop-blur-xl">
         <div class="flex items-center justify-between border-b border-slate-200/10 bg-slate-900/45 px-3 py-2.5">
           <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">Modo libre</span>
@@ -146,7 +163,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       </div>
     </div>
 
-    <div class="splash-controls-row shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-3 py-2 md:px-6">
+    <div id="splash-controles" class="splash-controls-row shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-3 py-2 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:px-6">
       <div
         class="splash-panel mx-auto w-full max-w-4xl rounded-xl border border-cyan-300/15 bg-slate-950/75 px-3 py-2.5 shadow-sm ring-1 ring-cyan-300/10 md:px-4"
         aria-label="Controles de entrada"
@@ -165,7 +182,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       </div>
     </div>
 
-    <footer class="splash-panel mt-0 shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-4 py-3 text-center backdrop-blur-md md:px-8">
+    <footer class="splash-panel mt-0 shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center backdrop-blur-md md:px-8">
       <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[9px] font-medium uppercase tracking-wider text-slate-300/55">
         <span class="cursor-default hover:text-slate-100/90">Privacidad</span>
         <span class="cursor-default hover:text-slate-100/90">Términos</span>

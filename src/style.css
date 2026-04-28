@@ -1,8 +1,30 @@
 @import 'tailwindcss';
 
-/* Cuerpo: barra de desplazamiento vertical cuando el contenido no cabe (splash, menú, ventanas bajas). */
+/* Cuerpo: scroll con momentum en iOS + corregir 100vh en Safari móvil. */
 .mtr-app-body {
   -webkit-overflow-scrolling: touch;
+  /* En iOS Safari el 100vh incluye la barra del navegador; dvh lo resuelve.
+     Como fallback para Safari <15 usamos -webkit-fill-available. */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+}
+
+/* Evitar selección de texto accidental en el juego */
+.mtr-app-root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Splash: permite seleccionar texto en los controles/leaderboard */
+.splash-root {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* iOS: evitar zoom en inputs y elementos interactivos */
+input, button, select, textarea {
+  font-size: max(16px, 1em);
 }
 
 /* Solo subset latin (~un woff2). Evita cirílico, griego, vietnamita y latin-ext del paquete completo. */

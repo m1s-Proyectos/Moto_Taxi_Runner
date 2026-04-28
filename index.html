@@ -2,9 +2,27 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- viewport-fit=cover: respeta el notch y bordes redondeados en iOS/Android -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Mototaxi Runner</title>
     <meta name="description" content="Carrera por paradas: Pupy → Papá → Mamá" />
+
+    <!-- iOS Safari: fullscreen / PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MotoTaxi" />
+
+    <!-- Android Chrome: barra de sistema oscura -->
+    <meta name="theme-color" content="#020617" />
+
+    <!-- Evita que iOS resalte elementos al tocar -->
+    <style>
+      * { -webkit-tap-highlight-color: transparent; }
+      /* Previene el zoom-in al doble tap en iOS durante el juego */
+      canvas { touch-action: none; }
+    </style>
+
     <script async src="https://vibejam.cc/2026/widget.js"></script>
   </head>
   <body
