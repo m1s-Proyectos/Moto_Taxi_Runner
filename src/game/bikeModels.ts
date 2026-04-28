@@ -116,15 +116,16 @@ function glassMat(tint: number, transmission: number): THREE.MeshPhysicalMateria
   return new THREE.MeshPhysicalMaterial({
     color: tint,
     metalness: 0,
-    roughness: 0.07,
+    roughness: 0.05,
     transmission,
     thickness: 0.45,
     transparent: true,
     opacity: 1,
     ior: 1.48,
     side: THREE.DoubleSide,
-    emissive: 0x0a1018,
-    emissiveIntensity: 0.06,
+    emissive: 0x0,
+    emissiveIntensity: 0,
+    envMapIntensity: 1,
   });
 }
 

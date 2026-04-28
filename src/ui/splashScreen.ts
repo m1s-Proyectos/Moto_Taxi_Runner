@@ -4,10 +4,12 @@ import { renderSplashFreeLeaderboard } from '../lib/localFreeProfile';
 /** Fondo general del splash. */
 const HOME_IMG = '/img/home.jpg';
 
-/** Mototaxi destacado en el cuadro del CTA (`public/img/mototaxi1.jpg`). */
-const MOTO_HOME_PRIMARY = '/img/mototaxi1.jpg';
+/** Mototaxi destacado en el cuadro del CTA (`public/img/iconoHome.png`). */
+const MOTO_HOME_PRIMARY = '/img/iconoHome.png';
 const MOTO_HOME_FALLBACKS = [
+  '/img/iconoHome.png',
   '/img/mototaxi2.jpg',
+  '/img/mototaxi1.jpg',
   '/img/motoHome.jpg',
   encodeURI('/img/moto home.jpg'),
   '/img/moto-home.jpg',
@@ -36,102 +38,141 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
     'splash-root relative z-[200] flex min-h-dvh w-full flex-col text-zinc-100 overflow-x-hidden';
 
   root.innerHTML = `
-    <div class="splash-bg absolute inset-0 -z-20 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')" aria-hidden="true"></div>
-    <div class="absolute inset-0 -z-10 bg-gradient-to-b from-black/75 via-black/55 to-black/90"></div>
-    <div class="splash-vignette pointer-events-none absolute inset-0 -z-[5] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.55)_100%)]"></div>
-    <div class="splash-scanlines pointer-events-none absolute inset-0 -z-[4] opacity-[0.07] mix-blend-overlay" style="background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.35) 2px, rgba(0,0,0,0.35) 4px)"></div>
+    <div class="splash-bg absolute inset-0 -z-30 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')" aria-hidden="true"></div>
+    <div class="absolute inset-0 -z-20 bg-[radial-gradient(120%_100%_at_12%_8%,rgba(251,146,60,0.42)_0%,rgba(236,72,153,0.2)_26%,rgba(2,6,23,0.94)_64%)]"></div>
+    <div class="absolute inset-0 -z-10 bg-[linear-gradient(130deg,rgba(59,130,246,0.24)_0%,rgba(2,6,23,0.08)_30%,rgba(34,211,238,0.22)_62%,rgba(251,113,133,0.16)_100%)]"></div>
+    <div class="pointer-events-none absolute inset-0 -z-[9] opacity-45 [background:radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.35)_0,rgba(56,189,248,0)_34%),radial-gradient(circle_at_80%_30%,rgba(251,113,133,0.28)_0,rgba(251,113,133,0)_36%),radial-gradient(circle_at_50%_90%,rgba(251,191,36,0.22)_0,rgba(251,191,36,0)_42%)]"></div>
+    <div class="splash-vignette pointer-events-none absolute inset-0 -z-[8] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(2,6,23,0.65)_100%)]"></div>
+    <div class="splash-scanlines pointer-events-none absolute inset-0 -z-[7] opacity-[0.055] mix-blend-screen" style="background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.25) 2px, rgba(255,255,255,0.25) 4px)"></div>
 
-    <header class="splash-panel flex shrink-0 items-center justify-between gap-4 border-b border-yellow-500/15 bg-black/35 px-4 py-3 backdrop-blur-xl md:px-8">
-      <span class="text-xs font-bold italic tracking-[0.2em] text-yellow-400 md:text-sm">MOTOTAXI RUNNER</span>
-      <nav class="hidden items-center gap-8 text-[10px] font-semibold uppercase tracking-[0.25em] text-zinc-500 md:flex">
-        <span class="cursor-default border-b border-yellow-400 pb-0.5 text-yellow-400">Opciones</span>
-        <span class="cursor-default hover:text-zinc-300">Ayuda</span>
-        <span class="cursor-default hover:text-zinc-300">Ranking</span>
-      </nav>
-      <div class="flex items-center gap-3 text-zinc-500">
-        <span class="rounded border border-zinc-700/80 bg-zinc-900/60 p-1.5" title="Ajustes">
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.213-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        </span>
-        <span class="rounded border border-zinc-700/80 bg-zinc-900/60 p-1.5" title="Perfil">
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
-        </span>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 -z-[6] h-[42vh] bg-[linear-gradient(to_top,rgba(2,6,23,0.95),rgba(2,6,23,0.18),transparent)]"></div>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 -z-[5] h-[34vh] opacity-90 [background:repeating-linear-gradient(90deg,rgba(15,23,42,0.52)_0,rgba(15,23,42,0.52)_18px,rgba(30,41,59,0.42)_18px,rgba(30,41,59,0.42)_44px,rgba(51,65,85,0.3)_44px,rgba(51,65,85,0.3)_72px)]"></div>
+    <div class="pointer-events-none absolute inset-x-0 bottom-[14vh] -z-[4] h-[22vh] opacity-85 [background:linear-gradient(to_top,rgba(251,191,36,0.23),rgba(251,191,36,0.03))]"></div>
+    <div class="splash-streak pointer-events-none absolute -left-20 top-[30%] z-[3] h-[2px] w-[36vw] rotate-[-11deg] bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
+    <div class="splash-streak pointer-events-none absolute right-[-8vw] top-[52%] z-[3] h-[3px] w-[30vw] rotate-[-16deg] bg-gradient-to-r from-transparent via-amber-300/80 to-transparent"></div>
+
+    <header class="splash-panel flex shrink-0 items-center justify-between gap-4 border-b border-cyan-300/20 bg-slate-950/45 px-4 py-3 backdrop-blur-xl md:px-8">
+      <div class="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1">
+        <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.95)]"></span>
+        <span class="text-[10px] font-extrabold uppercase tracking-[0.23em] text-cyan-100">Arcade Build</span>
       </div>
+      <nav class="hidden items-center gap-8 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300/70 md:flex">
+        <span class="cursor-default border-b border-amber-300 pb-0.5 text-amber-200">City Rush</span>
+        <span class="cursor-default hover:text-white">Garage</span>
+        <span class="cursor-default hover:text-white">Ranking</span>
+      </nav>
+      <div class="rounded-full border border-amber-300/45 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">vibe jam</div>
     </header>
 
-    <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_minmax(0,240px)] md:gap-6 md:p-6 lg:px-10">
-      <main class="flex flex-col items-center justify-center gap-6 py-6 md:py-10">
-        <h1 class="splash-title text-center text-3xl font-black italic tracking-tighter text-yellow-400 drop-shadow-[0_0_24px_rgba(250,204,21,0.45)] sm:text-5xl md:text-6xl lg:text-7xl">
-          MOTOTAXI<br class="sm:hidden" /><span class="hidden sm:inline"> </span>RUNNER
-        </h1>
-        <div class="splash-hero relative w-full max-w-lg overflow-hidden rounded-xl border border-yellow-500/30 shadow-[0_0_40px_rgba(250,204,21,0.12)]">
-          <div class="relative aspect-[4/3] w-full bg-zinc-950">
-            <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi" class="h-full w-full object-contain object-center" decoding="async" />
+    <div class="grid grid-cols-1 gap-5 px-4 py-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-6 md:px-8 lg:px-12">
+      <main class="relative flex min-h-[360px] flex-col justify-between gap-5 md:min-h-[520px]">
+        <div class="splash-panel max-w-[36rem] rounded-3xl border border-cyan-300/30 bg-slate-900/35 p-5 shadow-[0_0_0_1px_rgba(103,232,249,0.14),0_24px_45px_rgba(2,6,23,0.45)] backdrop-blur-2xl">
+          <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-300/45 bg-amber-300/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">
+            ${icBolt}
+            Nitro District
           </div>
-          <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/20"></div>
-          <div class="absolute bottom-0 left-0 right-0 flex flex-col items-center gap-2 p-5 pb-6">
-            <p class="text-[10px] font-semibold uppercase tracking-[0.35em] text-yellow-200/80">Ruta: Pupy → Papá → Casa</p>
-            <button type="button" data-splash-start class="splash-cta group flex items-center gap-2 rounded-lg border-2 border-yellow-400 bg-yellow-400 px-8 py-3 text-sm font-black uppercase tracking-widest text-black shadow-[0_0_28px_rgba(250,204,21,0.45)] transition hover:scale-[1.02] hover:shadow-[0_0_36px_rgba(250,204,21,0.55)] active:scale-[0.98]">
+          <h1 class="splash-title text-[2.2rem] font-black uppercase leading-[0.9] tracking-[-0.02em] text-white sm:text-[3.2rem] md:text-[4rem]">
+            <span class="block bg-gradient-to-r from-white via-amber-100 to-amber-300 bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(253,224,71,0.4)]">MotoTaxi</span>
+            <span class="block bg-gradient-to-r from-cyan-200 via-sky-300 to-fuchsia-300 bg-clip-text text-transparent drop-shadow-[0_0_28px_rgba(34,211,238,0.42)]">Runner</span>
+          </h1>
+          <p class="mt-3 max-w-[32ch] text-sm font-medium leading-relaxed text-slate-200/85">
+            Ciudad premium, reflejos neón y velocidad total. El mismo mototaxi icónico ahora en una portada de alto impacto.
+          </p>
+        </div>
+
+        <div class="splash-panel inline-flex max-w-max items-center gap-4 rounded-2xl border border-fuchsia-300/30 bg-slate-950/45 px-4 py-3 shadow-[0_0_0_1px_rgba(244,114,182,0.15)] backdrop-blur-xl">
+          <div class="relative flex h-14 w-14 items-center justify-center rounded-xl border border-fuchsia-300/45 bg-fuchsia-500/12">
+            <span class="absolute inset-1 rounded-lg border border-fuchsia-200/25"></span>
+            <span class="text-xl font-black text-fuchsia-100">MTR</span>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Official Badge</p>
+            <p class="text-sm font-extrabold uppercase tracking-[0.13em] text-fuchsia-100">Street League</p>
+          </div>
+        </div>
+      </main>
+
+      <section class="relative flex flex-col gap-3 md:pt-4">
+        <div class="splash-hero relative overflow-hidden rounded-[1.8rem] border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)]">
+          <div class="pointer-events-none absolute inset-0 z-[1] [background:radial-gradient(circle_at_75%_24%,rgba(250,204,21,0.24),transparent_35%),radial-gradient(circle_at_18%_40%,rgba(56,189,248,0.24),transparent_42%),linear-gradient(145deg,rgba(8,47,73,0.44),rgba(30,41,59,0.55))]"></div>
+          <div class="pointer-events-none absolute inset-0 z-[2] [background:repeating-linear-gradient(105deg,rgba(255,255,255,0.06)_0,rgba(255,255,255,0.06)_1px,transparent_1px,transparent_14px)]"></div>
+          <div class="relative z-[3] aspect-[16/11] min-h-[340px]">
+            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-36 blur-sm [filter:saturate(1.22)_brightness(0.94)]" decoding="async" />
+            <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(125deg,rgba(2,6,23,0.7)_0%,rgba(2,6,23,0.2)_34%,rgba(2,6,23,0.72)_100%)]"></div>
+            <div class="pointer-events-none absolute inset-y-[28%] left-[-12%] h-[2px] w-[56%] rotate-[-9deg] bg-gradient-to-r from-transparent via-cyan-200/80 to-transparent"></div>
+            <div class="pointer-events-none absolute inset-y-[56%] right-[-10%] h-[3px] w-[44%] rotate-[-14deg] bg-gradient-to-r from-transparent via-amber-200/80 to-transparent"></div>
+            <div class="relative flex h-full w-full items-center justify-center p-3 sm:p-4">
+              <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi" class="block max-h-full max-w-full rounded-[1.2rem] [filter:drop-shadow(0_18px_32px_rgba(0,0,0,0.62))_saturate(1.18)_contrast(1.12)]" decoding="async" />
+            </div>
+            <div class="pointer-events-none absolute bottom-4 left-4 rounded-full border border-cyan-200/55 bg-cyan-200/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-50">Speed FX</div>
+            <div class="pointer-events-none absolute bottom-4 right-4 rounded-full border border-amber-200/55 bg-amber-200/12 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-amber-50">Nitro Glow</div>
+          </div>
+          <div class="relative z-[4] flex justify-center overflow-hidden border-t border-white/12 px-5 py-4">
+            <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true" class="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-25 blur-md [filter:saturate(1.25)_brightness(0.82)]" decoding="async" />
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/45 via-slate-900/25 to-slate-900/60"></div>
+            <button type="button" data-splash-start class="splash-cta relative z-[1] group flex items-center gap-2 rounded-xl border-2 border-amber-300 bg-gradient-to-b from-amber-300 to-orange-400 px-8 py-3 text-sm font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_0_35px_rgba(251,191,36,0.55)] transition hover:scale-[1.02] hover:shadow-[0_0_45px_rgba(251,191,36,0.7)] active:scale-[0.98]">
               ${icBolt}
               Iniciar carrera
             </button>
           </div>
         </div>
-      </main>
-
-      <aside class="flex w-full max-w-md flex-col gap-3 md:mx-0 md:max-w-none md:pt-2 lg:pt-4">
-        <div class="splash-panel overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-950/90 to-black/60 shadow-[0_0_0_1px_rgba(250,204,21,0.06),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-xl">
-          <div class="flex items-center justify-between border-b border-zinc-800/90 bg-zinc-900/50 px-3 py-2.5">
-            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/95">Modo libre</span>
-            <span class="rounded border border-zinc-700/80 bg-zinc-950/80 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-zinc-500">Local</span>
-          </div>
-          <div class="grid grid-cols-[2rem_1fr_auto] gap-x-2 border-b border-zinc-800/50 px-3 py-1.5 text-[8px] font-bold uppercase tracking-wider text-zinc-500">
-            <span>#</span>
-            <span>Piloto</span>
-            <span class="text-right">Crono</span>
-          </div>
-          <ol data-splash-free-leaderboard class="text-[11px]"></ol>
-          <p class="border-t border-zinc-800/50 bg-zinc-950/40 px-2 py-1.5 text-center text-[8px] leading-snug text-zinc-500">Tu apodo y tu mejor <span class="text-zinc-400">carrera libre</span> se guardan solo en este dispositivo (sin cuenta). Con Supabase: ranking global al acabar, si hay servidor.</p>
-        </div>
-        <div class="splash-panel flex gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-2">
-          <div class="min-w-0 flex-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 px-2 py-1.5">
-            <div class="text-[8px] font-bold uppercase tracking-widest text-zinc-500">${icWifi} Ping</div>
-            <span data-splash-ping class="font-mono text-base font-bold leading-none text-amber-400">12<span class="text-xs text-amber-400/50">ms</span></span>
-          </div>
-          <div class="min-w-0 flex-1 rounded-lg border border-zinc-800/60 bg-zinc-950/40 px-2 py-1.5">
-            <div class="text-[8px] font-bold uppercase tracking-widest text-zinc-500">Veloc.</div>
-            <p class="font-mono text-base font-bold leading-none text-zinc-300">0<small class="ml-0.5 text-[10px] text-zinc-500">km/h</small></p>
-          </div>
-        </div>
-      </aside>
+      </section>
     </div>
 
-    <div class="splash-controls-row shrink-0 border-t border-yellow-500/10 bg-black/25 px-3 py-2 md:px-6">
+    <div class="grid grid-cols-1 gap-3 px-4 pb-2 md:grid-cols-[1.2fr_0.8fr] md:px-8 lg:px-12">
+      <div class="splash-panel overflow-hidden rounded-2xl border border-slate-200/15 bg-slate-950/48 shadow-[0_0_0_1px_rgba(148,163,184,0.15)] backdrop-blur-xl">
+        <div class="flex items-center justify-between border-b border-slate-200/10 bg-slate-900/45 px-3 py-2.5">
+          <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200">Modo libre</span>
+          <span class="rounded border border-slate-300/25 bg-slate-800/60 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-slate-200/70">Local</span>
+        </div>
+        <div class="grid grid-cols-[2rem_1fr_auto] gap-x-2 border-b border-slate-200/10 px-3 py-1.5 text-[8px] font-bold uppercase tracking-wider text-slate-300/55">
+          <span>#</span>
+          <span>Piloto</span>
+          <span class="text-right">Crono</span>
+        </div>
+        <ol data-splash-free-leaderboard class="text-[11px]"></ol>
+        <p class="border-t border-slate-200/10 bg-slate-900/45 px-2 py-1.5 text-center text-[8px] leading-snug text-slate-300/55">Tu apodo y tu mejor <span class="text-slate-100/75">carrera libre</span> se guardan localmente. Con Supabase: ranking global al finalizar.</p>
+      </div>
+
+      <div class="splash-panel flex gap-2 rounded-2xl border border-slate-200/15 bg-slate-950/48 p-2.5 shadow-[0_0_0_1px_rgba(148,163,184,0.14)] backdrop-blur-xl">
+        <div class="min-w-0 flex-1 rounded-xl border border-slate-200/10 bg-slate-900/50 px-2 py-1.5">
+          <div class="text-[8px] font-bold uppercase tracking-widest text-slate-300/60">${icWifi} Ping</div>
+          <span data-splash-ping class="font-mono text-base font-bold leading-none text-cyan-200">12<span class="text-xs text-cyan-200/55">ms</span></span>
+        </div>
+        <div class="min-w-0 flex-1 rounded-xl border border-slate-200/10 bg-slate-900/50 px-2 py-1.5">
+          <div class="text-[8px] font-bold uppercase tracking-widest text-slate-300/60">Veloc.</div>
+          <p class="font-mono text-base font-bold leading-none text-amber-100">0<small class="ml-0.5 text-[10px] text-amber-100/60">km/h</small></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="splash-controls-row shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-3 py-2 md:px-6">
       <div
-        class="splash-panel mx-auto w-full max-w-3xl rounded-xl border border-amber-500/12 bg-zinc-950/80 px-3 py-2.5 shadow-sm ring-1 ring-amber-500/5 md:px-4"
+        class="splash-panel mx-auto w-full max-w-4xl rounded-xl border border-cyan-300/15 bg-slate-950/75 px-3 py-2.5 shadow-sm ring-1 ring-cyan-300/10 md:px-4"
         aria-label="Controles de entrada"
       >
-        <p class="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-amber-500/80">${icKeyboard} Controles</p>
-        <div class="flex flex-wrap content-start items-center gap-x-2.5 gap-y-1.5 text-[10px] text-zinc-500">
-          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="shrink-0 text-zinc-500">Acelerar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">W</kbd><span class="text-zinc-600">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Arriba">↑</kbd></span>
-          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
-          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-zinc-500">Freno</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">S</kbd><span class="text-zinc-600">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Abajo">↓</kbd></span>
-          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
-          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-zinc-500">Giro</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">A</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">D</kbd><span class="text-zinc-600">/</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Izq.">←</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Der.">→</kbd></span>
-          <span class="h-2.5 w-px bg-zinc-800" aria-hidden="true"></span>
-          <span class="inline-flex items-center gap-1.5"><span class="text-zinc-500">Reiniciar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">R</kbd></span>
+        <p class="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-200/85">${icKeyboard} Controles</p>
+        <div class="flex flex-wrap content-start items-center gap-x-2.5 gap-y-1.5 text-[10px] text-slate-300/65">
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="shrink-0 text-slate-300/70">Acelerar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">W</kbd><span class="text-slate-400/70">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Arriba">↑</kbd></span>
+          <span class="h-2.5 w-px bg-slate-700/70" aria-hidden="true"></span>
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-slate-300/70">Freno</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">S</kbd><span class="text-slate-400/70">·</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Abajo">↓</kbd></span>
+          <span class="h-2.5 w-px bg-slate-700/70" aria-hidden="true"></span>
+          <span class="inline-flex flex-wrap items-center gap-1.5"><span class="text-slate-300/70">Giro</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">A</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">D</kbd><span class="text-slate-400/70">/</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Izq.">←</kbd><kbd class="mtr-splash-kbd mtr-splash-kbd-compact" title="Der.">→</kbd></span>
+          <span class="h-2.5 w-px bg-slate-700/70" aria-hidden="true"></span>
+          <span class="inline-flex items-center gap-1.5"><span class="text-slate-300/70">Reiniciar</span><kbd class="mtr-splash-kbd mtr-splash-kbd-compact">R</kbd></span>
         </div>
-        <p class="mt-1.5 border-t border-zinc-800/60 pt-1.5 text-[9px] leading-snug text-zinc-500">${icDevice}<span class="text-zinc-400">Móvil:</span> a dos manos: girar a la izquierda, gas y freno a la derecha; <span class="text-zinc-500">Giro on</span> = inclinación (solo móvil) · <span class="text-zinc-400">PC:</span> ratón, W, S, A/D, sin giro en navegador</p>
+        <p class="mt-1.5 border-t border-slate-700/70 pt-1.5 text-[9px] leading-snug text-slate-300/60">${icDevice}<span class="text-slate-100/85">Móvil:</span> a dos manos: girar a la izquierda, gas y freno a la derecha; <span class="text-slate-200/75">Giro on</span> = inclinación (solo móvil) · <span class="text-slate-100/85">PC:</span> ratón, W, S, A/D</p>
       </div>
     </div>
 
-    <footer class="splash-panel mt-0 shrink-0 border-t border-yellow-500/10 bg-black/40 px-4 py-3 text-center backdrop-blur-md md:px-8">
-      <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[9px] font-medium uppercase tracking-wider text-zinc-600">
-        <span class="cursor-default hover:text-zinc-500">Privacidad</span>
-        <span class="cursor-default hover:text-zinc-500">Términos</span>
-        <span class="cursor-default hover:text-zinc-500">Legal</span>
-        <span class="cursor-default hover:text-zinc-500">Créditos</span>
+    <footer class="splash-panel mt-0 shrink-0 border-t border-cyan-300/15 bg-slate-950/40 px-4 py-3 text-center backdrop-blur-md md:px-8">
+      <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[9px] font-medium uppercase tracking-wider text-slate-300/55">
+        <span class="cursor-default hover:text-slate-100/90">Privacidad</span>
+        <span class="cursor-default hover:text-slate-100/90">Términos</span>
+        <span class="cursor-default hover:text-slate-100/90">Legal</span>
+        <span class="cursor-default hover:text-slate-100/90">Créditos</span>
       </div>
-      <p class="mt-1 text-[9px] text-zinc-600">© 2026 Mototaxi Runner · Vibe Jam · sistemas operativos</p>
+      <p class="mt-1 text-[9px] text-slate-300/45">© 2026 Mototaxi Runner · City Rush Edition · Vibe Jam</p>
     </footer>
   `;
 

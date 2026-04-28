@@ -76,6 +76,7 @@ import {
 } from './pedestrians';
 import { createParkedCar } from './parkedCar';
 import { addCityscape } from './worldDecor';
+import { tickCityShaders } from '../lib/cityShaders';
 import { getUseMobileGameUi } from '../lib/deviceInputProfile';
 import { createNightSky, type NightSky } from './nightSky';
 import { ensureLocalFreeProfile, recordFreeModePersonalBestIfBetter } from '../lib/localFreeProfile';
@@ -83,6 +84,7 @@ import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
 import { DriftTrail } from './driftTrail';
 import { createDefaultTurboPickups, updateTurboPickupFloat, type TurboPickupInstance } from './turboPickups';
 import { addTrafficLightsToScene, isInActiveGreenCorridor } from './trafficLights';
+import { getAsphaltColorMap, getAsphaltNormalMap, getSidewalkMap } from '../lib/proceduralTextures';
 
 type RacePhase = 'ready' | 'boarding' | 'exchange' | 'racing' | 'done';
 
@@ -330,10 +332,12 @@ export class MotoGame {
       powerPreference: 'high-performance',
       alpha: false,
     });
-    this.renderer.setClearColor(0x121018, 1);
+    this.renderer.setClearColor(0xbfe7ff, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    this.renderer.toneMappingExposure = 1.14;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.className =
       'absolute inset-0 z-[1] block touch-none select-none outline-none';
     this.renderer.domElement.setAttribute('tabindex', '-1');
@@ -359,22 +363,34 @@ export class MotoGame {
     });
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x121018, 80, 360);
+    this.scene.fog = new THREE.Fog(0xe9f6ff, 100, 430);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
 
-    const ambient = new THREE.AmbientLight(0x3d3e48, 0.52);
+    const ambient = new THREE.AmbientLight(0xf2f7ff, 1.02);
     this.scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0x1c2648, 0x10121a, 0.68);
+    const hemi = new THREE.HemisphereLight(0xb0ddff, 0xf2d8b8, 1.04);
     this.scene.add(hemi);
-    const moonLight = new THREE.DirectionalLight(0xaab8d8, 0.65);
-    moonLight.position.set(-40, 55, 20);
-    this.scene.add(moonLight);
-    const street = new THREE.DirectionalLight(0xffe0c4, 0.54);
-    street.position.set(2, 14, 8);
-    this.scene.add(street);
-    const roadFill = new THREE.DirectionalLight(0x8a9ab8, 0.22);
+    const sun = new THREE.DirectionalLight(0xffefbf, 1.12);
+    sun.position.set(-56, 82, -18);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 12;
+    sun.shadow.camera.far = 220;
+    sun.shadow.camera.left = -52;
+    sun.shadow.camera.right = 52;
+    sun.shadow.camera.top = 52;
+    sun.shadow.camera.bottom = -52;
+    sun.shadow.bias = -0.00012;
+    this.scene.add(sun);
+    const skyBounce = new THREE.DirectionalLight(0xd9ecff, 0.54);
+    skyBounce.position.set(34, 40, 24);
+    this.scene.add(skyBounce);
+    const warmFill = new THREE.DirectionalLight(0xffe3b8, 0.48);
+    warmFill.position.set(46, 28, -22);
+    this.scene.add(warmFill);
+    const roadFill = new THREE.DirectionalLight(0xffe9b7, 0.32);
     roadFill.position.set(0, 1, 0);
     this.scene.add(roadFill);
 
@@ -570,38 +586,54 @@ export class MotoGame {
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(720, 720, 1, 1),
       new THREE.MeshStandardMaterial({
-        color: 0x1c1724,
-        roughness: 0.98,
+        color: 0x9fbc8f,
+        map: getSidewalkMap(),
+        roughness: 0.95,
         metalness: 0,
-        emissive: 0x0e0c12,
-        emissiveIntensity: 0.06,
+        emissive: 0x0,
+        emissiveIntensity: 0,
       }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = WORLD_FLOOR_Y;
+    ground.receiveShadow = true;
     this.scene.add(ground);
 
     const roadMat = new THREE.MeshStandardMaterial({
-      color: 0x444d64,
-      roughness: 0.84,
-      metalness: 0.05,
-      emissive: 0x1c283c,
-      emissiveIntensity: 0.32,
+      color: 0xffffff,
+      map: getAsphaltColorMap(),
+      normalMap: getAsphaltNormalMap(),
+      normalScale: new THREE.Vector2(0.38, 0.38),
+      roughness: 0.86,
+      metalness: 0.08,
+      emissive: 0x0,
+      emissiveIntensity: 0,
     });
     const roadGeo = buildRoadRibbonGeometry(ROAD_HALF_WIDTH, 0.01, 256);
     const road = new THREE.Mesh(roadGeo, roadMat);
     road.receiveShadow = true;
+    road.castShadow = false;
     this.scene.add(road);
 
-    const curve = getRoadCenterline();
-    const spillP = new THREE.Vector3();
-    const nSpill = 12;
-    for (let i = 0; i < nSpill; i++) {
-      const t = 0.035 + (i / Math.max(1, nSpill - 1)) * 0.93;
-      curve.getPointAt(t, spillP);
-      const spill = new THREE.PointLight(0xffd5b0, 1.45, 64, 2);
-      spill.position.set(spillP.x, 5.2, spillP.z);
-      this.scene.add(spill);
+    // Relieve visual barato: franjas muy sutiles para simular reparaciones/cracks.
+    const patchMat = new THREE.MeshStandardMaterial({
+      color: 0x5f6772,
+      roughness: 0.92,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+    });
+    const patchGeo = new THREE.PlaneGeometry(0.18, 2.8);
+    const patchCurve = getRoadCenterline();
+    const pTmp = new THREE.Vector3();
+    for (let t = 0.02; t < 0.98; t += 0.035) {
+      patchCurve.getPointAt(t, pTmp);
+      const patch = new THREE.Mesh(patchGeo, patchMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.rotation.y = THREE.MathUtils.degToRad((Math.sin(t * 40) * 7));
+      patch.position.set(pTmp.x + Math.sin(t * 9) * 0.7, 0.018, pTmp.z);
+      this.scene.add(patch);
     }
 
     addRoadCenterDashes(this.scene, 0.022, { tStep: 0.03, dashLen: 1.4, dashW: 0.36 });
@@ -1582,6 +1614,7 @@ export class MotoGame {
     this.camera.lookAt(this.camTarget);
 
     this.nightSky?.update(this.camera);
+    tickCityShaders(tSec);
     this.renderer.render(this.scene, this.camera);
   }
 }

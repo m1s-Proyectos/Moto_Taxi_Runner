@@ -71,14 +71,14 @@ function addOneTrafficLight(
 
   const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.12, 2.1, 8),
-    new THREE.MeshStandardMaterial({ color: 0x3f3f46, metalness: 0.2, roughness: 0.6 }),
+    new THREE.MeshStandardMaterial({ color: 0x6a727d, metalness: 0.25, roughness: 0.55 }),
   );
   pole.position.y = 1.05;
   g.add(pole);
 
   const box = new THREE.Mesh(
     new THREE.BoxGeometry(0.5, 1.0, 0.22, 1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.1, roughness: 0.5 }),
+    new THREE.MeshStandardMaterial({ color: 0x27313d, metalness: 0.14, roughness: 0.5 }),
   );
   box.position.set(0, 1.9, 0.14);
   g.add(box);
@@ -93,7 +93,7 @@ function addOneTrafficLight(
   const gMat = new THREE.MeshStandardMaterial({
     color: 0x052e0f,
     emissive: 0x22c55e,
-    emissiveIntensity: 0.9,
+    emissiveIntensity: 0.48,
     metalness: 0.15,
     roughness: 0.35,
   });

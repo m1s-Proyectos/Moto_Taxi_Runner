@@ -215,11 +215,11 @@ export function addRoadCenterDashes(
   const dashW = options?.dashW ?? 0.4;
   const c = getRoadCenterline();
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xfffcf0,
-    roughness: 0.45,
-    metalness: 0,
-    emissive: 0xfff4d8,
-    emissiveIntensity: 0.9,
+    color: 0xf5f1dc,
+    roughness: 0.62,
+    metalness: 0.05,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   const tvec = new THREE.Vector3();
   const p = new THREE.Vector3();

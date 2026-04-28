@@ -1,17 +1,21 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { getFacadeRoughnessMap } from '../lib/proceduralTextures';
+import { getFacadeRoughnessMap, getGlassMaskMap, getSidewalkMap } from '../lib/proceduralTextures';
+import { createBuildingFacadeMaterial, createSkylineFacadeMaterial } from '../lib/cityShaders';
 
 /**
  * Entorno urbano: fachadas con bloques redondeados + rugosidad procedural; sin GLB.
  */
 
-/* Fachada nocturna: cálida apagada + fríos. */
+/* Fachadas vivas de barrio: cálidos y pasteles alegres. */
 const BUILDING_PALETTE = [
-  0x4a3d38, 0x5a4538, 0x3d3a45, 0x504848, 0x4a3f36, 0x3d4548, 0x524a40, 0x454a52, 0x2c5a50, 0x48444a,
+  0xffbf9f, 0xffd67a, 0xffb7b3, 0xffe3a5, 0xffd1a9, 0xb8e4ff, 0xb9f0c7, 0xffb78a, 0xfde68a, 0xffd6c1,
+  0xfca5a5, 0xfdba74, 0xfacc15, 0x93c5fd, 0x86efac,
 ];
 
-const OFFICE_COOL = [0x3a4252, 0x323a48, 0x404a5a, 0x2a3444, 0x38455a];
+const OFFICE_COOL = [0xdbe7ff, 0xd7f0ff, 0xd3e4ff, 0xe3e8ff, 0xffe4c7];
+const SHOP_AWNING = [0xf97316, 0xef4444, 0xf59e0b, 0xfb7185, 0xfb923c, 0xf43f5e, 0xfbbf24, 0x0ea5e9];
+const SHOP_SIGN = [0xffffff, 0xfff7ed, 0xfefce8, 0xecfeff, 0xdcfce7];
 
 function detRand(i: number, j: number): number {
   const s = Math.sin(i * 12.9898 + j * 78.233 + 42.42) * 43758.5453;
@@ -21,11 +25,11 @@ function detRand(i: number, j: number): number {
 /** Calles perimetrales estreitas (bulevares) paralelos al eje de la avenida principal. */
 function addPerimeterStreets(root: THREE.Scene | THREE.Group, zCenter: number, zSpan: number): void {
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x2a3040,
-    roughness: 0.9,
+    color: 0x6f7782,
+    roughness: 0.92,
     metalness: 0.04,
-    emissive: 0x151a24,
-    emissiveIntensity: 0.1,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   const geo = new THREE.PlaneGeometry(5.5, zSpan, 1, 1);
   for (const side of [-1, 1] as const) {
@@ -39,11 +43,11 @@ function addPerimeterStreets(root: THREE.Scene | THREE.Group, zCenter: number, z
 /** Tiras transversas que simulan intersecciones o calles de cruce. */
 function addCrossStreetPatches(root: THREE.Scene | THREE.Group, zList: number[]): void {
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x2e3545,
+    color: 0x757f8b,
     roughness: 0.9,
     metalness: 0.04,
-    emissive: 0x121820,
-    emissiveIntensity: 0.1,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   for (const z of zList) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(44, 4.2, 1, 1), mat);
@@ -64,13 +68,17 @@ function addInnerBuildingBelt(
   scaleH: { min: number; max: number },
 ): { count: number; inst: THREE.InstancedMesh; colors: Float32Array; dummy: THREE.Object3D } {
   const geom = new RoundedBoxGeometry(1, 1, 1, 2, 0.09);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.64,
-    metalness: 0.04,
-    roughnessMap: getFacadeRoughnessMap(),
-    vertexColors: true,
+  /**
+   * Material de fachada con shader personalizado (gradiente, ventanas
+   * procedurales, acentos neon, variación per-instancia). 1 draw call por
+   * InstancedMesh — el detalle es 100% shader-side.
+   */
+  const mat = createBuildingFacadeMaterial({
+    windowGlow: 0.55,
+    baseRoughness: 0.5,
+    baseMetalness: 0.06,
   });
+  mat.roughnessMap = getFacadeRoughnessMap();
   const inst = new THREE.InstancedMesh(geom, mat, maxCount);
   const colors = new Float32Array(maxCount * 3);
   const dummy = new THREE.Object3D();
@@ -95,7 +103,7 @@ function addInnerBuildingBelt(
       inst.setMatrixAt(idx, dummy.matrix);
       const hex = palette[Math.floor(detRand(idx, side + 2) * palette.length)]!;
       const c = new THREE.Color(hex);
-      c.multiplyScalar(0.85);
+      c.multiplyScalar(1.16);
       colors[idx * 3] = c.r;
       colors[idx * 3 + 1] = c.g;
       colors[idx * 3 + 2] = c.b;
@@ -139,17 +147,20 @@ function addWindowFuzz(
   xRange: { lo: number; hi: number },
 ): void {
   const winGeom = new THREE.PlaneGeometry(0.5, 0.34);
-  /** Noche: luz cálida encendida (no fría de día). */
+  const glassMask = getGlassMaskMap();
+  /** Ventana diurna con reflejo azulado y menos emisión. */
   const winMat = new THREE.MeshStandardMaterial({
-    color: 0xffe8a8,
-    metalness: 0.1,
-    roughness: 0.35,
-    emissive: 0xff9a40,
-    emissiveIntensity: 1.05,
+    color: 0xc9e5fb,
+    metalness: 0.62,
+    roughness: 0.18,
+    roughnessMap: glassMask,
+    emissive: 0xbfdfff,
+    emissiveIntensity: 0.2,
     transparent: true,
-    opacity: 0.96,
+    opacity: 0.85,
     side: THREE.DoubleSide,
     depthWrite: false,
+    envMapIntensity: 0.95,
   });
   const inst = new THREE.InstancedMesh(winGeom, winMat, maxItems);
   const d = new THREE.Object3D();
@@ -173,17 +184,19 @@ function addWindowFuzz(
 
   /** Segunda capa: ventana más chica, otro eje (simula fachada cruzada / patio). */
   const smallGeom = new THREE.PlaneGeometry(0.34, 0.24);
-  /** Apagada / persiana / otro piso. */
+  /** Segunda capa de ventanas menos reflectiva para variedad. */
   const winMat2 = new THREE.MeshStandardMaterial({
-    color: 0x2a1e18,
-    metalness: 0.2,
-    roughness: 0.4,
-    emissive: 0x2a1a0a,
-    emissiveIntensity: 0.15,
+    color: 0xaed1ee,
+    metalness: 0.48,
+    roughness: 0.24,
+    roughnessMap: glassMask,
+    emissive: 0x0,
+    emissiveIntensity: 0.04,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.8,
     side: THREE.DoubleSide,
     depthWrite: false,
+    envMapIntensity: 0.75,
   });
   const n2 = Math.min(110, maxItems);
   const inst2 = new THREE.InstancedMesh(smallGeom, winMat2, n2);
@@ -206,6 +219,134 @@ function addWindowFuzz(
   root.add(inst2);
 }
 
+/** Paneles de color en fachadas para romper bloques grises y dar look urbano alegre. */
+function addFacadeColorBands(root: THREE.Object3D, zFrom: number, zTo: number): void {
+  const colors = [0xffb74d, 0xfb7185, 0xfde047, 0x7dd3fc, 0x86efac, 0xffa59e];
+  const bandMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.36,
+    metalness: 0.08,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+  });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xfff7ed, roughness: 0.58, metalness: 0.05 });
+  const bandI = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.95, 1.08), bandMat, 220);
+  const frameI = new THREE.InstancedMesh(new THREE.BoxGeometry(2.02, 0.06, 0.06), frameMat, 440);
+  const bandColors = new Float32Array(220 * 3);
+  const d = new THREE.Object3D();
+  let i = 0;
+  let f = 0;
+  for (let z = zFrom; z > zTo && i < 210; z -= 5.4) {
+    for (const side of [-1, 1] as const) {
+      const x = side * (10.7 + detRand(i, 4) * 0.55);
+      const y = 1.7 + detRand(i, 7) * 2.8;
+      d.position.set(x, y, z + (detRand(i, 9) - 0.5) * 1.5);
+      d.rotation.set(0, side < 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+      d.updateMatrix();
+      bandI.setMatrixAt(i, d.matrix);
+      const c = new THREE.Color(colors[Math.floor(detRand(i, side + 15) * colors.length)]!);
+      bandColors[i * 3] = c.r;
+      bandColors[i * 3 + 1] = c.g;
+      bandColors[i * 3 + 2] = c.b;
+
+      d.position.set(x, y - 0.57, z + (detRand(i, 9) - 0.5) * 1.5);
+      d.rotation.set(0, side < 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+      d.updateMatrix();
+      frameI.setMatrixAt(f++, d.matrix);
+      d.position.set(x, y + 0.57, z + (detRand(i, 9) - 0.5) * 1.5);
+      d.updateMatrix();
+      frameI.setMatrixAt(f++, d.matrix);
+      i++;
+    }
+  }
+  bandI.instanceColor = new THREE.InstancedBufferAttribute(bandColors, 3);
+  bandI.count = i;
+  frameI.count = f;
+  bandI.instanceMatrix.needsUpdate = true;
+  frameI.instanceMatrix.needsUpdate = true;
+  bandI.instanceColor.needsUpdate = true;
+  root.add(bandI, frameI);
+}
+
+/** Frentes comerciales modulares: toldos, vitrinas y rótulos ligeros. */
+function addStorefrontRhythm(root: THREE.Object3D, zFrom: number, zTo: number): void {
+  const awnMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.52, metalness: 0.08 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf3e6d4, roughness: 0.56, metalness: 0.08 });
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.42, metalness: 0.18 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0xd6ecff,
+    roughness: 0.12,
+    metalness: 0.58,
+    transparent: true,
+    opacity: 0.82,
+    emissive: 0x9fd0ff,
+    emissiveIntensity: 0.08,
+    depthWrite: false,
+  });
+
+  const awnI = new THREE.InstancedMesh(new THREE.BoxGeometry(1.45, 0.18, 0.52), awnMat, 180);
+  const signI = new THREE.InstancedMesh(new THREE.BoxGeometry(1.05, 0.3, 0.06), signMat, 180);
+  const winI = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.05, 0.72), glassMat, 180);
+  const postI = new THREE.InstancedMesh(new THREE.BoxGeometry(0.08, 1.08, 0.08), frameMat, 360);
+  const colorA = new Float32Array(180 * 3);
+  const colorS = new Float32Array(180 * 3);
+  const d = new THREE.Object3D();
+  let i = 0;
+  let p = 0;
+  for (let z = zFrom; z > zTo && i < 170; z -= 7.8) {
+    for (const side of [-1, 1] as const) {
+      const xFacade = side * (10.95 + detRand(i, 3) * 0.36);
+      const zJ = z + (detRand(i, 5) - 0.5) * 0.9;
+      d.position.set(xFacade + side * 0.22, 1.05, zJ);
+      d.rotation.set(0, side < 0 ? Math.PI / 2 : -Math.PI / 2, 0);
+      d.updateMatrix();
+      awnI.setMatrixAt(i, d.matrix);
+
+      d.position.set(xFacade + side * 0.08, 1.42, zJ);
+      d.updateMatrix();
+      signI.setMatrixAt(i, d.matrix);
+
+      d.position.set(xFacade + side * 0.06, 0.72, zJ);
+      d.updateMatrix();
+      winI.setMatrixAt(i, d.matrix);
+
+      const awnHex = SHOP_AWNING[Math.floor(detRand(i, side + 11) * SHOP_AWNING.length)]!;
+      const signHex = SHOP_SIGN[Math.floor(detRand(i, side + 17) * SHOP_SIGN.length)]!;
+      const ca = new THREE.Color(awnHex);
+      const cs = new THREE.Color(signHex);
+      colorA[i * 3] = ca.r;
+      colorA[i * 3 + 1] = ca.g;
+      colorA[i * 3 + 2] = ca.b;
+      colorS[i * 3] = cs.r;
+      colorS[i * 3 + 1] = cs.g;
+      colorS[i * 3 + 2] = cs.b;
+
+      const postOffset = 0.52;
+      d.position.set(xFacade + side * 0.14, 0.58, zJ - postOffset);
+      d.rotation.set(0, 0, 0);
+      d.updateMatrix();
+      postI.setMatrixAt(p++, d.matrix);
+      d.position.set(xFacade + side * 0.14, 0.58, zJ + postOffset);
+      d.updateMatrix();
+      postI.setMatrixAt(p++, d.matrix);
+      i++;
+    }
+  }
+  awnI.instanceColor = new THREE.InstancedBufferAttribute(colorA, 3);
+  signI.instanceColor = new THREE.InstancedBufferAttribute(colorS, 3);
+  awnI.count = i;
+  signI.count = i;
+  winI.count = i;
+  postI.count = p;
+  awnI.instanceMatrix.needsUpdate = true;
+  signI.instanceMatrix.needsUpdate = true;
+  winI.instanceMatrix.needsUpdate = true;
+  postI.instanceMatrix.needsUpdate = true;
+  awnI.instanceColor.needsUpdate = true;
+  signI.instanceColor.needsUpdate = true;
+  root.add(awnI, signI, winI, postI);
+}
+
 /** Farolas a lo largo de aceras. */
 function addLampRow(
   root: THREE.Object3D,
@@ -215,8 +356,8 @@ function addLampRow(
   step: number,
   offset: number,
 ): void {
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x1e2128, roughness: 0.55, metalness: 0.35 });
-  const capMat = new THREE.MeshStandardMaterial({ color: 0xfff6ea, emissive: 0xffecbc, emissiveIntensity: 0.55 });
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x747e88, roughness: 0.55, metalness: 0.35 });
+  const capMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, emissive: 0xffffff, emissiveIntensity: 0.06 });
   const pGeo = new THREE.CylinderGeometry(0.08, 0.1, 2.8, 8);
   const cGeo = new THREE.SphereGeometry(0.2, 8, 6);
   const pInst = new THREE.InstancedMesh(pGeo, poleMat, 200);
@@ -249,8 +390,8 @@ function addStylizedTrees(
   every: number,
   seed: number,
 ): void {
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x2c2416, roughness: 0.9, metalness: 0.02 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2a7048, roughness: 0.88, metalness: 0.01 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a432a, roughness: 0.9, metalness: 0.02 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x5fb85f, roughness: 0.88, metalness: 0.01 });
   const tGeo = new THREE.CylinderGeometry(0.12, 0.16, 1.1, 6);
   const lGeo = new THREE.IcosahedronGeometry(0.7, 0);
   const tI = new THREE.InstancedMesh(tGeo, trunkMat, 100);
@@ -277,9 +418,45 @@ function addStylizedTrees(
   root.add(tI, lI);
 }
 
+function addCornerGreenery(root: THREE.Object3D, zFrom: number, zTo: number): void {
+  const bushMat = new THREE.MeshStandardMaterial({ color: 0x67b85c, roughness: 0.93, metalness: 0.01 });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffb38a, roughness: 0.85, metalness: 0.02 });
+  const bushI = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.42, 0), bushMat, 120);
+  const flwI = new THREE.InstancedMesh(new THREE.SphereGeometry(0.08, 8, 6), flowerMat, 180);
+  const d = new THREE.Object3D();
+  let b = 0;
+  let f = 0;
+  for (let z = zFrom; z > zTo && b < 110; z -= 10.5) {
+    for (const side of [-1, 1] as const) {
+      const x = side * (10.35 + detRand(b, side + 3) * 0.6);
+      d.position.set(x, 0.38, z + (detRand(b, 8) - 0.5) * 1.4);
+      d.scale.set(0.8 + detRand(b, 4) * 0.65, 0.6 + detRand(b, 6) * 0.5, 0.8 + detRand(b, 7) * 0.6);
+      d.rotation.set(0, detRand(b, 2) * Math.PI, 0);
+      d.updateMatrix();
+      bushI.setMatrixAt(b++, d.matrix);
+      d.scale.set(1, 1, 1);
+
+      for (let k = 0; k < 2 && f < 170; k++) {
+        d.position.set(
+          x + (detRand(f + k, 12) - 0.5) * 0.5,
+          0.7 + detRand(f, 13) * 0.15,
+          z + (detRand(f + k, 14) - 0.5) * 0.8,
+        );
+        d.updateMatrix();
+        flwI.setMatrixAt(f++, d.matrix);
+      }
+    }
+  }
+  bushI.count = b;
+  flwI.count = f;
+  bushI.instanceMatrix.needsUpdate = true;
+  flwI.instanceMatrix.needsUpdate = true;
+  root.add(bushI, flwI);
+}
+
 /** Manchas de césped / parterres entre calles. */
 function addPlazaBands(root: THREE.Object3D, zCenter: number, zSpan: number): void {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x243828, roughness: 0.99, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7cc86a, roughness: 0.97, metalness: 0 });
   const p = new THREE.Mesh(new THREE.PlaneGeometry(18, 7, 1, 1), mat);
   p.rotation.x = -Math.PI / 2;
   p.position.set(24, 0.004, zCenter);
@@ -297,14 +474,8 @@ function addPlazaBands(root: THREE.Object3D, zCenter: number, zSpan: number): vo
  * Bloques de horizonte muy lejanos (lectura al fondo, detalle bajo en vertientes).
  */
 function addDistantSkyline(root: THREE.Object3D, zStart: number, zEnd: number, count: number): void {
-  const rMap = getFacadeRoughnessMap();
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x3a4050,
-    roughness: 0.8,
-    metalness: 0.08,
-    roughnessMap: rMap,
-    vertexColors: true,
-  });
+  const mat = createSkylineFacadeMaterial();
+  mat.roughnessMap = getFacadeRoughnessMap();
   const geo = new RoundedBoxGeometry(1, 1, 1, 2, 0.14);
   const inst = new THREE.InstancedMesh(geo, mat, count);
   const colors = new Float32Array(count * 3);
@@ -325,7 +496,7 @@ function addDistantSkyline(root: THREE.Object3D, zStart: number, zEnd: number, c
       d.scale.set(w, h, dep);
       d.updateMatrix();
       inst.setMatrixAt(i, d.matrix);
-      const c = new THREE.Color(0x3a3f4e).lerp(new THREE.Color(0x1e222d), detRand(i, 7) * 0.55);
+      const c = new THREE.Color(0xe0eaff).lerp(new THREE.Color(0xb6c3d6), detRand(i, 7) * 0.55);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -342,7 +513,7 @@ function addDistantSkyline(root: THREE.Object3D, zStart: number, zEnd: number, c
 
 /** Líneas aéreas paralelas a la avenida (luz tenue a lo largo de la ruta). */
 function addAerialWires(root: THREE.Object3D, z0: number, z1: number): void {
-  const mat = new THREE.LineBasicMaterial({ color: 0x5a6578, transparent: true, opacity: 0.32 });
+  const mat = new THREE.LineBasicMaterial({ color: 0x6f7a88, transparent: true, opacity: 0.3 });
   const g1 = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-20, 3.1, z0),
     new THREE.Vector3(-20, 3.1, z1),
@@ -352,6 +523,61 @@ function addAerialWires(root: THREE.Object3D, z0: number, z1: number): void {
     new THREE.Vector3(20, 2.9, z1 - 0.2),
   ]);
   root.add(new THREE.Line(g1, mat), new THREE.Line(g2, mat));
+}
+
+function addStreetProps(root: THREE.Object3D, zFrom: number, zTo: number): void {
+  const benchMat = new THREE.MeshStandardMaterial({ color: 0xb78658, roughness: 0.72, metalness: 0.12 });
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x8b99a8, roughness: 0.56, metalness: 0.34 });
+  const signMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.33, metalness: 0.18, emissive: 0xffffff, emissiveIntensity: 0.03 });
+  const hydMat = new THREE.MeshStandardMaterial({ color: 0xd13b32, roughness: 0.54, metalness: 0.16 });
+
+  const benchI = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.14, 0.35), benchMat, 72);
+  const poleI = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.05, 0.06, 2.2, 8), poleMat, 92);
+  const signI = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.38, 0.05), signMat, 92);
+  const hydI = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.11, 0.13, 0.42, 10), hydMat, 42);
+  const d = new THREE.Object3D();
+
+  let b = 0;
+  let p = 0;
+  let h = 0;
+  for (let z = zFrom; z > zTo; z -= 14) {
+    for (const side of [-1, 1] as const) {
+      const x = side * 12.8 + detRand(p + 3, side + 7) * 0.6;
+      d.position.set(x, 1.1, z + detRand(p, 4) * 0.7);
+      d.updateMatrix();
+      poleI.setMatrixAt(p, d.matrix);
+
+      d.position.set(x + side * 0.2, 1.8, z + detRand(p, 5) * 0.6);
+      d.rotation.set(0, side < 0 ? 0 : Math.PI, 0);
+      d.updateMatrix();
+      signI.setMatrixAt(p, d.matrix);
+      d.rotation.set(0, 0, 0);
+      p++;
+
+      if (b < 72 && detRand(b, side + 13) > 0.35) {
+        d.position.set(side * 12.4, 0.32, z + (detRand(b, 2) - 0.5) * 2.1);
+        d.rotation.set(0, side < 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0);
+        d.updateMatrix();
+        benchI.setMatrixAt(b++, d.matrix);
+      }
+
+      if (h < 42 && detRand(h + 11, side + 3) > 0.46) {
+        d.position.set(side * 11.2, 0.22, z + (detRand(h, 7) - 0.5) * 1.6);
+        d.rotation.set(0, 0, 0);
+        d.updateMatrix();
+        hydI.setMatrixAt(h++, d.matrix);
+      }
+    }
+  }
+  poleI.count = p;
+  signI.count = p;
+  benchI.count = b;
+  hydI.count = h;
+  poleI.instanceMatrix.needsUpdate = true;
+  signI.instanceMatrix.needsUpdate = true;
+  benchI.instanceMatrix.needsUpdate = true;
+  hydI.instanceMatrix.needsUpdate = true;
+  root.add(benchI, poleI, signI, hydI);
 }
 
 /** Invisible barriers to prevent vehicle from passing through buildings */
@@ -397,12 +623,14 @@ export function addCityscape(scene: THREE.Scene): void {
   const zStart = -400;
   const zEnd = 55;
 
+  const sidewalkMap = getSidewalkMap();
   const sidewalkMat = new THREE.MeshStandardMaterial({
-    color: 0x5a5e6c,
-    roughness: 0.86,
+    color: 0xf0e6d6,
+    roughness: 0.84,
     metalness: 0.05,
-    emissive: 0x2a2f3c,
-    emissiveIntensity: 0.16,
+    map: sidewalkMap,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   const swLen = 440;
   const swGeo = new THREE.PlaneGeometry(5.6, swLen);
@@ -416,11 +644,11 @@ export function addCityscape(scene: THREE.Scene): void {
   root.add(swR);
 
   const curbMat = new THREE.MeshStandardMaterial({
-    color: 0x646a78,
+    color: 0xefe5d9,
     roughness: 0.72,
     metalness: 0.12,
-    emissive: 0x2c323e,
-    emissiveIntensity: 0.12,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   const curbGeo = new THREE.BoxGeometry(0.22, 0.25, swLen);
   const curbL = new THREE.Mesh(curbGeo, curbMat);
@@ -440,12 +668,16 @@ export function addCityscape(scene: THREE.Scene): void {
   addDistantSkyline(root, zStart + 4, zEnd, 100);
 
   addWindowFuzz(root, zStart, zEnd, 220, { lo: 10, hi: 32 });
+  addFacadeColorBands(root, 40, -372);
+  addStorefrontRhythm(root, 40, -372);
 
   addLampRow(root, 1, 48, -380, 16, 0.15);
   addLampRow(root, -1, 40, -375, 17, -0.1);
 
-  addStylizedTrees(root, 1, 38, -370, 18, 11);
-  addStylizedTrees(root, -1, 42, -368, 19, 13);
+  addStylizedTrees(root, 1, 38, -370, 14, 11);
+  addStylizedTrees(root, -1, 42, -368, 14, 13);
+  addCornerGreenery(root, 38, -372);
+  addStreetProps(root, 38, -372);
 
   // Add building collision barriers
   addBuildingCollisionBarriers(root, zStart, zEnd);

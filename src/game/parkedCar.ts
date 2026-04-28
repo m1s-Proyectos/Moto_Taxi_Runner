@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { ObstacleDef } from '../track/config';
 import { getCarPaintPeppleMap } from '../lib/proceduralTextures';
 
-/** Pinturas vivas y legibles de noche (evita azules/grises muy oscuros). */
+/** Pinturas urbanas vivas para lectura diurna. */
 const BODY_COLORS = [
   0x4a8ff0, 0x3b7cff, 0x22d3ee, 0x2dd4bf, 0x4ade80, 0x84cc16, 0xfacc15, 0xfbbf24, 0xfb923c, 0xf97316,
   0xf43f5e, 0xef4444, 0xec4899, 0xd946ef, 0xa855f7, 0x818cf8, 0xf472b6, 0xff6b9d,
@@ -44,49 +44,49 @@ export function createParkedCar(o: ObstacleDef, index: number): THREE.Group {
 
   const paintMap = getCarPaintPeppleMap();
   const bodyEm = new THREE.Color(pick);
-  bodyEm.multiplyScalar(0.48);
+  bodyEm.multiplyScalar(0.16);
   /** Standard (no transmisión): más barato en GPU con muchos coches. */
   const bodyMat = new THREE.MeshStandardMaterial({
     color: pick,
-    roughness: 0.38,
-    metalness: 0.46,
+    roughness: 0.3,
+    metalness: 0.52,
     roughnessMap: paintMap,
-    envMapIntensity: 0.45,
+    envMapIntensity: 0.9,
     emissive: bodyEm,
-    emissiveIntensity: 0.22,
+    emissiveIntensity: 0.08,
   });
   const glassMat = new THREE.MeshStandardMaterial({
     color: 0x1a2a3c,
     metalness: 0.5,
-    roughness: 0.14,
-    emissive: 0x0a1828,
-    emissiveIntensity: 0.1,
+    roughness: 0.11,
+    emissive: 0x0,
+    emissiveIntensity: 0,
     transparent: true,
     opacity: 0.88,
   });
   const bumperMat = new THREE.MeshStandardMaterial({
     color: 0x2a2a34,
-    roughness: 0.5,
+    roughness: 0.44,
     metalness: 0.32,
     emissive: 0x12141a,
     emissiveIntensity: 0.1,
   });
   const chromeMat = new THREE.MeshStandardMaterial({
     color: 0xe0e6f0,
-    roughness: 0.18,
+    roughness: 0.14,
     metalness: 0.88,
-    emissive: 0x7a8aa0,
-    emissiveIntensity: 0.18,
+    emissive: 0x0,
+    emissiveIntensity: 0,
   });
   const emissHead = new THREE.MeshStandardMaterial({
     color: 0xfefce8,
     emissive: 0xfff2cc,
-    emissiveIntensity: 0.85,
+    emissiveIntensity: 0.16,
   });
   const emissTail = new THREE.MeshStandardMaterial({
     color: 0x4a1010,
     emissive: 0xee1a1a,
-    emissiveIntensity: 0.6,
+    emissiveIntensity: 0.2,
   });
 
   const w = sx * 0.94;
