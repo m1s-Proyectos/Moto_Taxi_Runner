@@ -31,38 +31,58 @@ const icDevice = `<svg class="h-4 w-4 text-cyan-400/80" fill="none" stroke="curr
  */
 export function mountSplashScreen(host: HTMLElement, onComplete: () => void): void {
   host.textContent = '';
-  // overflow-y-auto permite scroll vertical; overflow-x-hidden solo corta lo horizontal.
-  host.classList.add('relative', 'min-h-dvh', 'w-full', 'overflow-x-hidden', 'overflow-y-auto', 'bg-black');
+  // ROOT CAUSE FIX #2 (scroll): el <body> es el ÚNICO scroll container.
+  // Antes añadíamos `overflow-y-auto` aquí -> creaba container anidado y en
+  // iOS/Android el touch se atascaba (URL bar nunca se ocultaba => "freeze").
+  // Tampoco usar overflow-x: clip aquí porque por spec CSS fuerza overflow-y: clip
+  // automáticamente, lo que recorta el contenido y bloquea el scroll del body.
+  // Solución: ningún overflow en host/root. El body (index.html) ya tiene
+  // `overflow-x-hidden overflow-y-auto`, suficiente y funciona en iOS/Android.
+  host.classList.add('relative', 'min-h-dvh', 'w-full', 'max-w-full', 'bg-black');
 
   const root = document.createElement('div');
   root.className =
-    'splash-root relative z-[200] flex min-h-dvh w-full flex-col text-zinc-100 overflow-x-hidden scroll-smooth';
+    'splash-root relative z-[200] flex min-h-dvh w-full max-w-full flex-col text-zinc-100 scroll-smooth';
 
   root.innerHTML = `
-    <div class="splash-bg absolute inset-0 -z-30 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')" aria-hidden="true"></div>
-    <div class="absolute inset-0 -z-20 bg-[radial-gradient(120%_100%_at_12%_8%,rgba(251,146,60,0.42)_0%,rgba(236,72,153,0.2)_26%,rgba(2,6,23,0.94)_64%)]"></div>
-    <div class="absolute inset-0 -z-10 bg-[linear-gradient(130deg,rgba(59,130,246,0.24)_0%,rgba(2,6,23,0.08)_30%,rgba(34,211,238,0.22)_62%,rgba(251,113,133,0.16)_100%)]"></div>
-    <div class="pointer-events-none absolute inset-0 -z-[9] opacity-45 [background:radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.35)_0,rgba(56,189,248,0)_34%),radial-gradient(circle_at_80%_30%,rgba(251,113,133,0.28)_0,rgba(251,113,133,0)_36%),radial-gradient(circle_at_50%_90%,rgba(251,191,36,0.22)_0,rgba(251,191,36,0)_42%)]"></div>
-    <div class="splash-vignette pointer-events-none absolute inset-0 -z-[8] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(2,6,23,0.65)_100%)]"></div>
-    <div class="splash-scanlines pointer-events-none absolute inset-0 -z-[7] opacity-[0.055] mix-blend-screen" style="background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.25) 2px, rgba(255,255,255,0.25) 4px)"></div>
+    <!--
+      Capa de decoración: usa overflow-hidden LOCAL para contener streaks
+      con offsets negativos (-left-20, right-[-8vw]) sin afectar el scroll
+      vertical global. Es absolute pointer-events-none, no captura input.
+    -->
+    <div class="splash-deco-layer pointer-events-none absolute inset-0 -z-[5] overflow-hidden" aria-hidden="true">
+      <div class="splash-bg absolute inset-0 -z-30 bg-cover bg-center will-change-transform" style="background-image:url('${HOME_IMG}')"></div>
+      <div class="absolute inset-0 -z-20 bg-[radial-gradient(120%_100%_at_12%_8%,rgba(251,146,60,0.42)_0%,rgba(236,72,153,0.2)_26%,rgba(2,6,23,0.94)_64%)]"></div>
+      <div class="absolute inset-0 -z-10 bg-[linear-gradient(130deg,rgba(59,130,246,0.24)_0%,rgba(2,6,23,0.08)_30%,rgba(34,211,238,0.22)_62%,rgba(251,113,133,0.16)_100%)]"></div>
+      <div class="absolute inset-0 -z-[9] opacity-45 [background:radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.35)_0,rgba(56,189,248,0)_34%),radial-gradient(circle_at_80%_30%,rgba(251,113,133,0.28)_0,rgba(251,113,133,0)_36%),radial-gradient(circle_at_50%_90%,rgba(251,191,36,0.22)_0,rgba(251,191,36,0)_42%)]"></div>
+      <div class="splash-vignette absolute inset-0 -z-[8] bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(2,6,23,0.65)_100%)]"></div>
+      <div class="splash-scanlines absolute inset-0 -z-[7] opacity-[0.055] mix-blend-screen" style="background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.25) 2px, rgba(255,255,255,0.25) 4px)"></div>
+      <div class="absolute inset-x-0 bottom-0 -z-[6] h-[42vh] bg-[linear-gradient(to_top,rgba(2,6,23,0.95),rgba(2,6,23,0.18),transparent)]"></div>
+      <div class="absolute inset-x-0 bottom-0 -z-[5] h-[34vh] opacity-90 [background:repeating-linear-gradient(90deg,rgba(15,23,42,0.52)_0,rgba(15,23,42,0.52)_18px,rgba(30,41,59,0.42)_18px,rgba(30,41,59,0.42)_44px,rgba(51,65,85,0.3)_44px,rgba(51,65,85,0.3)_72px)]"></div>
+      <div class="absolute inset-x-0 bottom-[14vh] -z-[4] h-[22vh] opacity-85 [background:linear-gradient(to_top,rgba(251,191,36,0.23),rgba(251,191,36,0.03))]"></div>
+      <div class="splash-streak absolute -left-20 top-[30%] z-[3] h-[2px] w-[36vw] rotate-[-11deg] bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
+      <div class="splash-streak absolute right-[-8vw] top-[52%] z-[3] h-[3px] w-[30vw] rotate-[-16deg] bg-gradient-to-r from-transparent via-amber-300/80 to-transparent"></div>
+    </div>
 
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 -z-[6] h-[42vh] bg-[linear-gradient(to_top,rgba(2,6,23,0.95),rgba(2,6,23,0.18),transparent)]"></div>
-    <div class="pointer-events-none absolute inset-x-0 bottom-0 -z-[5] h-[34vh] opacity-90 [background:repeating-linear-gradient(90deg,rgba(15,23,42,0.52)_0,rgba(15,23,42,0.52)_18px,rgba(30,41,59,0.42)_18px,rgba(30,41,59,0.42)_44px,rgba(51,65,85,0.3)_44px,rgba(51,65,85,0.3)_72px)]"></div>
-    <div class="pointer-events-none absolute inset-x-0 bottom-[14vh] -z-[4] h-[22vh] opacity-85 [background:linear-gradient(to_top,rgba(251,191,36,0.23),rgba(251,191,36,0.03))]"></div>
-    <div class="splash-streak pointer-events-none absolute -left-20 top-[30%] z-[3] h-[2px] w-[36vw] rotate-[-11deg] bg-gradient-to-r from-transparent via-cyan-300/80 to-transparent"></div>
-    <div class="splash-streak pointer-events-none absolute right-[-8vw] top-[52%] z-[3] h-[3px] w-[30vw] rotate-[-16deg] bg-gradient-to-r from-transparent via-amber-300/80 to-transparent"></div>
-
-    <header class="splash-panel sticky top-0 z-50 flex shrink-0 items-center justify-between gap-4 border-b border-cyan-300/20 bg-slate-950/75 px-4 py-3 backdrop-blur-xl md:px-8">
-      <div class="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1">
+    <!--
+      ROOT CAUSE FIX #1 (shift right): en pantallas <380px el header desbordaba
+      (~407px logicos) por 3 nav links + 2 badges con tracking ancho. Con
+      overflow-x-hidden no se veia scrollbar, pero el ancho computado seguia
+      siendo > viewport y arrastraba el centrado.
+      Solucion: tracking mas corto en movil, min-w-0 para permitir compresion,
+      y ocultar el badge "vibe jam" debajo de sm.
+    -->
+    <header class="splash-panel sticky top-0 z-50 flex w-full min-w-0 shrink-0 items-center justify-between gap-2 border-b border-cyan-300/20 bg-slate-950/75 px-3 py-3 backdrop-blur-xl sm:gap-4 sm:px-4 md:px-8">
+      <div class="inline-flex shrink-0 items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-500/10 px-2.5 py-1 sm:px-3">
         <span class="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.95)]"></span>
-        <span class="text-[10px] font-extrabold uppercase tracking-[0.23em] text-cyan-100">Arcade Build</span>
+        <span class="text-[9px] font-extrabold uppercase tracking-[0.16em] text-cyan-100 sm:text-[10px] sm:tracking-[0.23em]">Arcade</span>
       </div>
-      <nav class="flex items-center gap-5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300/70 md:gap-8">
-        <a href="#splash-hero" class="cursor-pointer border-b border-amber-300 pb-0.5 text-amber-200 transition-colors hover:text-amber-100">City Rush</a>
-        <a href="#splash-ranking" class="cursor-pointer transition-colors hover:text-white">Ranking</a>
-        <a href="#splash-controles" class="cursor-pointer transition-colors hover:text-white">Controles</a>
+      <nav class="flex min-w-0 items-center gap-3 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-300/70 sm:gap-5 sm:text-[10px] sm:tracking-[0.24em] md:gap-8">
+        <a href="#splash-hero" class="cursor-pointer whitespace-nowrap border-b border-amber-300 pb-0.5 text-amber-200 transition-colors hover:text-amber-100">City</a>
+        <a href="#splash-ranking" class="cursor-pointer whitespace-nowrap transition-colors hover:text-white">Ranking</a>
+        <a href="#splash-controles" class="cursor-pointer whitespace-nowrap transition-colors hover:text-white">Controles</a>
       </nav>
-      <div class="rounded-full border border-amber-300/45 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">vibe jam</div>
+      <div class="hidden shrink-0 rounded-full border border-amber-300/45 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100 sm:inline-block">vibe jam</div>
     </header>
 
     <div id="splash-hero" class="grid grid-cols-1 gap-4 px-3 py-4 sm:px-4 sm:py-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-6 md:px-8 lg:px-12">
@@ -108,11 +128,17 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
             <div class="pointer-events-none absolute inset-y-[28%] left-[-12%] h-[2px] w-[56%] rotate-[-9deg] bg-gradient-to-r from-transparent via-cyan-200/80 to-transparent"></div>
             <div class="pointer-events-none absolute inset-y-[56%] right-[-10%] h-[3px] w-[44%] rotate-[-14deg] bg-gradient-to-r from-transparent via-amber-200/80 to-transparent"></div>
 
-            <!-- Imagen principal: object-contain garantiza que nunca se recorta -->
-            <div class="relative flex h-full w-full items-center justify-center p-3 sm:p-5">
+            <!--
+              Imagen principal:
+              - flex centra por padre (justify/items center)
+              - mx-auto fallback de centrado por si el flex falla
+              - max-w-full + h-auto para nunca exceder viewport (Bug #1 fix)
+              - object-contain garantiza que el bitmap se vea completo
+            -->
+            <div class="relative flex h-full w-full items-center justify-center px-3 py-3 sm:px-5 sm:py-5">
               <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi"
-                class="block h-auto w-auto max-h-[48vw] max-w-[88%] rounded-xl object-contain sm:max-h-[260px] sm:max-w-[80%] sm:rounded-[1.2rem] md:max-h-[300px] lg:max-h-full lg:max-w-full
-                       [filter:drop-shadow(0_14px_28px_rgba(0,0,0,0.65))_saturate(1.18)_contrast(1.1)]"
+                class="mx-auto block h-auto max-h-[46vw] w-auto max-w-full rounded-xl object-contain sm:max-h-[240px] sm:max-w-[80%] sm:rounded-[1.2rem] md:max-h-[290px] lg:max-h-full lg:max-w-full
+                       [filter:drop-shadow(0_14px_28px_rgba(0,0,0,0.55))_saturate(1.18)_contrast(1.1)]"
                 decoding="async" />
             </div>
 

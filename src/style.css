@@ -1,16 +1,22 @@
 @import 'tailwindcss';
 
-/* Cuerpo: scroll con momentum en iOS + corregir 100vh en Safari móvil. */
+/* Cuerpo: scroll con momentum en iOS + alturas dinámicas correctas en mobile.
+   IMPORTANTE: NO usamos -webkit-fill-available porque causa saltos abruptos
+   cuando la URL bar de iOS Safari aparece/desaparece (rompe el momentum y
+   da sensación de freeze). 100dvh es soportado por todos los navegadores
+   modernos (iOS 15.4+, Chrome 108+, Firefox 101+).
+   Fallback simple: 100vh para navegadores muy antiguos (acepta el clip por
+   URL bar como compromiso aceptable). */
 .mtr-app-body {
   -webkit-overflow-scrolling: touch;
-  /* En iOS Safari el 100vh incluye la barra del navegador; dvh lo resuelve.
-     Como fallback para Safari <15 usamos -webkit-fill-available. */
   min-height: 100vh;
-  min-height: -webkit-fill-available;
   min-height: 100dvh;
+  /* Anti-bounce iOS: que el scroll no rebote más allá del contenido y "flote".
+     overscroll-behavior-y: contain evita que el touch propague al UA. */
+  overscroll-behavior-y: contain;
 }
 
-/* Evitar selección de texto accidental en el juego */
+/* Evitar selección de texto accidental en el juego (canvas) */
 .mtr-app-root {
   -webkit-user-select: none;
   user-select: none;
@@ -22,7 +28,7 @@
   user-select: text;
 }
 
-/* iOS: evitar zoom en inputs y elementos interactivos */
+/* iOS: inputs con font-size>=16px evitan auto-zoom al enfocar */
 input, button, select, textarea {
   font-size: max(16px, 1em);
 }
