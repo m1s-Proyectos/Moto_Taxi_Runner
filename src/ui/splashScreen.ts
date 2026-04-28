@@ -118,8 +118,8 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
           <div class="pointer-events-none absolute inset-0 z-[1] [background:radial-gradient(circle_at_75%_24%,rgba(250,204,21,0.24),transparent_35%),radial-gradient(circle_at_18%_40%,rgba(56,189,248,0.24),transparent_42%),linear-gradient(145deg,rgba(8,47,73,0.44),rgba(30,41,59,0.55))]"></div>
           <div class="pointer-events-none absolute inset-0 z-[2] [background:repeating-linear-gradient(105deg,rgba(255,255,255,0.06)_0,rgba(255,255,255,0.06)_1px,transparent_1px,transparent_14px)]"></div>
 
-          <!-- Contenedor de imagen: altura adaptativa según pantalla -->
-          <div class="relative z-[3] flex min-h-[52vw] w-full items-center justify-center sm:min-h-[300px] md:min-h-[340px] lg:aspect-[16/11] lg:min-h-0">
+          <!-- Contenedor de imagen: altura ampliada para presencia visual -->
+          <div class="relative z-[3] flex min-h-[78vw] w-full items-center justify-center sm:min-h-[420px] md:min-h-[460px] lg:aspect-[16/11] lg:min-h-[480px]">
             <!-- Fondo borroso (no scale, no recorte) -->
             <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
               class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-32 blur-sm [filter:saturate(1.22)_brightness(0.88)]"
@@ -134,11 +134,12 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
               - mx-auto fallback de centrado por si el flex falla
               - max-w-full + h-auto para nunca exceder viewport (Bug #1 fix)
               - object-contain garantiza que el bitmap se vea completo
+              - Tamaños ampliados para que la imagen tenga presencia visual
             -->
-            <div class="relative flex h-full w-full items-center justify-center px-3 py-3 sm:px-5 sm:py-5">
+            <div class="relative flex h-full w-full items-center justify-center px-2 py-2 sm:px-4 sm:py-4">
               <img data-splash-moto-hero src="${MOTO_HOME_PRIMARY}" alt="Mototaxi"
-                class="mx-auto block h-auto max-h-[46vw] w-auto max-w-full rounded-xl object-contain sm:max-h-[240px] sm:max-w-[80%] sm:rounded-[1.2rem] md:max-h-[290px] lg:max-h-full lg:max-w-full
-                       [filter:drop-shadow(0_14px_28px_rgba(0,0,0,0.55))_saturate(1.18)_contrast(1.1)]"
+                class="mx-auto block h-auto max-h-[72vw] w-auto max-w-[96%] rounded-xl object-contain sm:max-h-[380px] sm:max-w-[92%] sm:rounded-[1.2rem] md:max-h-[420px] md:max-w-[94%] lg:max-h-[440px] lg:max-w-[96%]
+                       [filter:drop-shadow(0_18px_36px_rgba(0,0,0,0.6))_saturate(1.2)_contrast(1.12)]"
                 decoding="async" />
             </div>
 
