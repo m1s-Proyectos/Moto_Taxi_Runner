@@ -132,6 +132,101 @@ const SMOOTH_LEAN_RESET_HZ = 20;
 /** Sin gas: freno motor fuerte (suelta clic/ratón o tecla y la moto cae a 0 enseguida). */
 const COAST_DRAG_MULT = 3.5;
 const COAST_STOP_SPEED_EPS = 0.2;
+/** Arranque más ágil y crucero estable para evitar salida lenta. */
+const LAUNCH_SPEED_MPS = 8.2;
+const CRUISE_SPEED_MPS = 12.2;
+const CRUISE_CATCHUP_HZ = 3.2;
+
+type HandlingProfileName = 'arcade' | 'balanced' | 'realistic';
+type HandlingProfile = {
+  steerDeadzone: number;
+  steerInHz: number;
+  steerInMouseHz: number;
+  steerReleaseHz: number;
+  yawRateLow: number;
+  yawRateHigh: number;
+  highSpeedSteerDamping: number;
+  steerAssistBaseHz: number;
+  steerAssistSpeedHz: number;
+  recoverMinSpeed: number;
+  turnDragBase: number;
+  turnAssistStart: number;
+  cruiseTurnPenalty: number;
+  softSlipMps: number;
+};
+
+const HANDLING_PROFILES: Readonly<Record<HandlingProfileName, HandlingProfile>> = {
+  arcade: {
+    steerDeadzone: 0.06,
+    steerInHz: 24,
+    steerInMouseHz: 27,
+    steerReleaseHz: 16,
+    yawRateLow: 2.35,
+    yawRateHigh: 1.48,
+    highSpeedSteerDamping: 0.34,
+    steerAssistBaseHz: 2.1,
+    steerAssistSpeedHz: 2.2,
+    recoverMinSpeed: 2.2,
+    turnDragBase: 1.08,
+    turnAssistStart: 0.44,
+    cruiseTurnPenalty: 0.3,
+    softSlipMps: 0.56,
+  },
+  balanced: {
+    steerDeadzone: 0.05,
+    steerInHz: SMOOTH_STEER_IN_HZ,
+    steerInMouseHz: SMOOTH_STEER_IN_MOUSE_HZ,
+    steerReleaseHz: SMOOTH_STEER_RELEASE_HZ,
+    yawRateLow: 2.15,
+    yawRateHigh: 1.32,
+    highSpeedSteerDamping: 0.31,
+    steerAssistBaseHz: 1.7,
+    steerAssistSpeedHz: 1.7,
+    recoverMinSpeed: 2.4,
+    turnDragBase: 0.84,
+    turnAssistStart: 0.5,
+    cruiseTurnPenalty: 0.13,
+    softSlipMps: 0.32,
+  },
+  realistic: {
+    steerDeadzone: 0.045,
+    steerInHz: 17,
+    steerInMouseHz: 20,
+    steerReleaseHz: 13,
+    yawRateLow: 1.8,
+    yawRateHigh: 1.08,
+    highSpeedSteerDamping: 0.38,
+    steerAssistBaseHz: 1.05,
+    steerAssistSpeedHz: 0.95,
+    recoverMinSpeed: 2.7,
+    turnDragBase: 0.62,
+    turnAssistStart: 0.56,
+    cruiseTurnPenalty: 0.08,
+    softSlipMps: 0.18,
+  },
+};
+
+const ACTIVE_HANDLING_PROFILE: HandlingProfileName = 'arcade';
+const HANDLING = HANDLING_PROFILES[ACTIVE_HANDLING_PROFILE];
+
+function applyDeadzone(value: number, dz: number): number {
+  const a = Math.abs(value);
+  if (a <= dz) return 0;
+  const scaled = (a - dz) / Math.max(1e-6, 1 - dz);
+  return Math.sign(value) * scaled;
+}
+
+function normalizeAngleRad(angle: number): number {
+  let a = angle;
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function lerpAngleRad(current: number, target: number, alpha: number): number {
+  const delta = normalizeAngleRad(target - current);
+  return current + delta * alpha;
+}
 
 export type MotoGameOptions = {
   /** Cierra el juego y deja que la app vuelva al splash (p. ej. botón «Volver a inicio»). */
@@ -218,6 +313,7 @@ export class MotoGame {
   private readonly vibeVjP = new THREE.Vector3();
   private readonly vibeVjTan = new THREE.Vector3();
   private readonly vibeVjRight = new THREE.Vector3();
+  private readonly steerAssistTangent = new THREE.Vector3();
 
   constructor(container: HTMLElement, options?: MotoGameOptions) {
     this.vibeJamAutoStart = options?.vibeJamAutoStart === true;
@@ -1159,6 +1255,7 @@ export class MotoGame {
       this.speed = 0;
       if (this.boardingUntilMs !== null && nowTick >= this.boardingUntilMs) {
         this.phase = 'racing';
+        this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
         this.boardingUntilMs = null;
         this.hidePassengerHud();
       }
@@ -1172,6 +1269,7 @@ export class MotoGame {
         } else if (this.exchangeMode === 'pick') {
           this.completeMidStop();
           this.phase = 'racing';
+          this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
           this.exchangeMode = null;
           this.exchangeUntilMs = null;
           this.hidePassengerHud();
@@ -1190,28 +1288,49 @@ export class MotoGame {
         unlockAudio();
         this.loopAudio.unlock();
         this.phase = 'boarding';
-        this.boardingUntilMs = nowTick + 1600;
+        this.boardingUntilMs = nowTick + 850;
         this.showPassengerHud('up', 'Subiendo pasajero…');
         this.showSessionStartHintForInitialBoarding();
       }
 
       const canDrive = this.phase === 'racing';
 
-      const steerInput = input.steer;
+      const steerInput = applyDeadzone(input.steer, HANDLING.steerDeadzone);
 
       if (canDrive) {
-        const speedFactor = Math.max(0.25, Math.abs(this.speed) / maxSpeed);
-        const steerStrength = THREE.MathUtils.lerp(
-          PHYS.steerLow,
-          PHYS.steerHigh,
-          speedFactor,
+        const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
+        const steerInHz = isMouseAimInputActive() ? HANDLING.steerInMouseHz : HANDLING.steerInHz;
+        const steerHz = Math.abs(steerInput) > 1e-3 ? steerInHz : HANDLING.steerReleaseHz;
+        const steerTAlpha = 1 - Math.exp(-steerHz * dt);
+        this.currentSteer = THREE.MathUtils.lerp(
+          this.currentSteer,
+          steerInput,
+          Math.min(1, steerTAlpha),
         );
-        const steerInHz = isMouseAimInputActive() ? SMOOTH_STEER_IN_MOUSE_HZ : SMOOTH_STEER_IN_HZ;
-        const steerTAlpha = 1 - Math.exp(-steerInHz * dt);
-        this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, steerInput, Math.min(1, steerTAlpha));
-        this.bike.rotation.y -= this.currentSteer * steerStrength * dt;
+
+        const yawRate = THREE.MathUtils.lerp(HANDLING.yawRateLow, HANDLING.yawRateHigh, speedNorm);
+        const speedDamping = 1 - speedNorm * HANDLING.highSpeedSteerDamping;
+        this.bike.rotation.y -= this.currentSteer * yawRate * Math.max(0.45, speedDamping) * dt;
+
+        // Asistencia arcade: al soltar dirección, recentra suavemente hacia la tangente de la ruta.
+        if (Math.abs(steerInput) < 0.02 && Math.abs(this.speed) > HANDLING.recoverMinSpeed) {
+          const tRoad = findTForWorldZ(this.bike.position.z);
+          getRoadCenterline().getTangentAt(tRoad, this.steerAssistTangent);
+          this.steerAssistTangent.y = 0;
+          if (this.steerAssistTangent.lengthSq() > 1e-6) {
+            this.steerAssistTangent.normalize();
+            const desiredYaw = Math.atan2(this.steerAssistTangent.x, -this.steerAssistTangent.z);
+            const assistHz = HANDLING.steerAssistBaseHz + HANDLING.steerAssistSpeedHz * speedNorm;
+            const assistAlpha = 1 - Math.exp(-assistHz * dt);
+            this.bike.rotation.y = lerpAngleRad(
+              this.bike.rotation.y,
+              desiredYaw,
+              Math.min(1, assistAlpha),
+            );
+          }
+        }
       } else {
-        const relAlpha = 1 - Math.exp(-SMOOTH_STEER_RELEASE_HZ * dt);
+        const relAlpha = 1 - Math.exp(-HANDLING.steerReleaseHz * dt);
         this.currentSteer = THREE.MathUtils.lerp(this.currentSteer, 0, Math.min(1, relAlpha));
       }
 
@@ -1222,10 +1341,27 @@ export class MotoGame {
 
       const throttle = canDrive ? input.throttle : 0;
       if (canDrive) {
+        const steerMag = Math.abs(this.currentSteer);
+        const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
         this.speed += throttle * accel * dt;
         const rollDrag = throttle > 0 ? drag : drag * COAST_DRAG_MULT;
         this.speed *= Math.exp(-rollDrag * dt);
+        if (steerMag > HANDLING.turnAssistStart) {
+          const over = (steerMag - HANDLING.turnAssistStart) / (1 - HANDLING.turnAssistStart);
+          const turnDrag = HANDLING.turnDragBase * over * (0.35 + speedNorm * 0.65);
+          this.speed *= Math.exp(-turnDrag * dt);
+        }
         this.speed = THREE.MathUtils.clamp(this.speed, -maxSpeed * 0.15, maxSpeed);
+        if (input.brake < 0.01) {
+          const cruiseTarget = Math.min(
+            maxSpeed,
+            CRUISE_SPEED_MPS * (1 - HANDLING.cruiseTurnPenalty * steerMag * speedNorm),
+          );
+          const cruiseAlpha = 1 - Math.exp(-CRUISE_CATCHUP_HZ * dt);
+          if (this.speed < cruiseTarget) {
+            this.speed = THREE.MathUtils.lerp(this.speed, cruiseTarget, Math.min(1, cruiseAlpha));
+          }
+        }
         if (throttle < 0.01 && Math.abs(this.speed) < COAST_STOP_SPEED_EPS) {
           this.speed = 0;
         }
@@ -1238,6 +1374,14 @@ export class MotoGame {
         // Solo desplazamiento hacia adelante en local: el arco del giro lo da yaw + translateZ
         // (el antiguo empuje en X con sin(yaw) sumaba derrape lateral falso y poco controlable al girar)
         this.bike.translateZ(-this.speed * dt);
+        const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
+        const steerMag = Math.abs(this.currentSteer);
+        if (steerMag > 0.08 && speedNorm > 0.22) {
+          // Deslizamiento lateral suave para "feel" arcade sin romper colisiones/recorrido.
+          const slipMps = -this.currentSteer * HANDLING.softSlipMps * speedNorm;
+          this.bike.position.x += Math.cos(this.bike.rotation.y) * slipMps * dt;
+          this.bike.position.z += Math.sin(this.bike.rotation.y) * slipMps * dt;
+        }
       }
 
       let x = this.bike.position.x;

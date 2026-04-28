@@ -52,25 +52,25 @@ const TILT_SMOOTH = 0.12;
 
 const W_STEER_KEY = 1.0;
 const W_STEER_PAD = 1.0;
-const W_STEER_POINTER = 0.8;
-const W_STEER_MOUSE = 0.85;
+const W_STEER_POINTER = 1.0;
+const W_STEER_MOUSE = 1.0;
 const W_STEER_TILT = 0.6;
 const W_STEER_TILT_WITH_POINTER = 0.25;
 /** Curva suave; más cercana a 1 = giro más directo (mejor con ratón en PC). */
-const STEER_NONLINEAR_EXP = 1.05;
+const STEER_NONLINEAR_EXP = 1.02;
 /** (nx-0.5) * escala → -1..1. */
 const CANVAS_X_STEER_MULT = 1.6;
 
 /** Mouse sensitivity configuration */
-const MOUSE_SENSITIVITY = 0.5;
-const MOUSE_SMOOTHING = 0.25;
-const MOUSE_MAX_DELTA = 0.2;
+const MOUSE_SENSITIVITY = 1.15;
+const MOUSE_SMOOTHING = 0.34;
+const MOUSE_DEADZONE = 0.025;
+const MOUSE_IDLE_RESET_MS = 140;
 
 /** Mouse smoothing state */
 let mouseRawSteer = 0;
 let mouseSmoothedSteer = 0;
-let lastMouseX = 0;
-let mouseInitialized = false;
+let lastMouseMoveAt = 0;
 
 /** Si el juego (p. ej. MotoGame) ajusta la respuesta con puntero fino sobre el lienzo. */
 export function isMouseAimInputActive(): boolean {
@@ -92,13 +92,47 @@ function readBrakeKeys(): number {
   return keys.has('s') || keys.has('arrowdown') ? 1 : 0;
 }
 
+function isMovementKey(key: string): boolean {
+  return (
+    key === 'w' ||
+    key === 'a' ||
+    key === 's' ||
+    key === 'd' ||
+    key === 'arrowup' ||
+    key === 'arrowdown' ||
+    key === 'arrowleft' ||
+    key === 'arrowright'
+  );
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  const tag = target.tagName.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
 export function attachKeyboard(): () => void {
   const down = (e: KeyboardEvent) => {
+    const key = e.key.toLowerCase();
+    if (isMovementKey(key) && !isEditableTarget(e.target)) {
+      e.preventDefault();
+      keys.add(key);
+      return;
+    }
     if (e.repeat) return;
-    keys.add(e.key.toLowerCase());
+    keys.add(key);
   };
   const up = (e: KeyboardEvent) => {
-    keys.delete(e.key.toLowerCase());
+    const key = e.key.toLowerCase();
+    if (isMovementKey(key) && !isEditableTarget(e.target)) {
+      e.preventDefault();
+    }
+    keys.delete(key);
   };
   
   // Use capture phase for faster response
@@ -149,6 +183,9 @@ export function attachPointerDriver(el: HTMLElement): () => void {
     if (e.target !== el) return;
     if (isPointerDriverBlockedByTopLayer(e, el)) return;
     pointerDriving = true;
+    useMouseAim = false;
+    mouseRawSteer = 0;
+    mouseSmoothedSteer = 0;
     pointerDrivePointerId = e.pointerId;
     updateSteer(e);
     try {
@@ -336,39 +373,32 @@ export function attachMouseAim(el: HTMLElement): () => void {
 
   const onMove = (e: MouseEvent) => {
     if (!can()) return;
+    if (pointerDriving) return;
     const r = el.getBoundingClientRect();
     if (r.width < 8) return;
-    
-    const currentX = e.clientX;
-    let deltaX = 0;
-    
-    if (mouseInitialized) {
-      deltaX = (currentX - lastMouseX) / r.width;
-      deltaX = Math.max(-MOUSE_MAX_DELTA, Math.min(MOUSE_MAX_DELTA, deltaX));
-      deltaX *= MOUSE_SENSITIVITY;
-    }
-    
-    lastMouseX = currentX;
-    mouseInitialized = true;
-    
+
     const nx = (e.clientX - r.left) / r.width;
-    mouseRawSteer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT));
-    
-    // More aggressive smoothing for better control
+    let steer = Math.max(-1, Math.min(1, (nx - 0.5) * CANVAS_X_STEER_MULT * MOUSE_SENSITIVITY));
+    if (Math.abs(steer) < MOUSE_DEADZONE) {
+      steer = 0;
+    }
+    mouseRawSteer = steer;
     mouseSmoothedSteer += (mouseRawSteer - mouseSmoothedSteer) * MOUSE_SMOOTHING;
     mouseAimSteer = mouseSmoothedSteer;
-    
+    lastMouseMoveAt = performance.now();
     useMouseAim = true;
   };
   const onEnter = () => {
-    if (can()) useMouseAim = true;
+    if (!can()) return;
+    if (pointerDriving) return;
+    lastMouseMoveAt = performance.now();
   };
   const onLeave = () => {
     useMouseAim = false;
     mouseAimSteer = 0;
     mouseRawSteer = 0;
     mouseSmoothedSteer = 0;
-    mouseInitialized = false;
+    lastMouseMoveAt = 0;
   };
 
   el.addEventListener('mousemove', onMove);
@@ -380,7 +410,7 @@ export function attachMouseAim(el: HTMLElement): () => void {
     mouseAimSteer = 0;
     mouseRawSteer = 0;
     mouseSmoothedSteer = 0;
-    mouseInitialized = false;
+    lastMouseMoveAt = 0;
     el.removeEventListener('mousemove', onMove);
     el.removeEventListener('mouseenter', onEnter);
     el.removeEventListener('mouseleave', onLeave);
@@ -395,6 +425,19 @@ function applySteerNonlinearity(steerSum: number, exp: number): number {
 }
 
 export function pollInput(): InputState {
+  const now = performance.now();
+  if (useMouseAim && !pointerDriving && lastMouseMoveAt > 0 && now - lastMouseMoveAt > MOUSE_IDLE_RESET_MS) {
+    mouseSmoothedSteer *= 0.78;
+    if (Math.abs(mouseSmoothedSteer) < 0.01) {
+      mouseSmoothedSteer = 0;
+      mouseRawSteer = 0;
+      mouseAimSteer = 0;
+      useMouseAim = false;
+    } else {
+      mouseAimSteer = mouseSmoothedSteer;
+    }
+  }
+
   const kSteer = readSteerKeys();
   const kThrottle = readThrottleKeys();
   const kBrake = readBrakeKeys();
@@ -403,9 +446,9 @@ export function pollInput(): InputState {
   /** Mando L/R: prioridad sobre giro en lienzo (multitacto Android: gas en canvas + ←/→). */
   const padSteerActive = Math.abs(pSteer) > 1e-4;
   const ptrSteer = pointerDriving ? pointerSteer : 0;
-  const aim = useMouseAim ? mouseAimSteer : 0;
+  const aim = useMouseAim && !pointerDriving ? mouseAimSteer : 0;
   const ptr = pointerDriving && !padSteerActive ? ptrSteer : 0;
-  const aimG = useMouseAim && !padSteerActive ? aim : 0;
+  const aimG = useMouseAim && !padSteerActive && !pointerDriving ? aim : 0;
 
   if (tiltInputOn) {
     let tr = tiltSteerRaw;
@@ -418,12 +461,18 @@ export function pollInput(): InputState {
   const tiltWeight = pointerDriving && !padSteerActive ? W_STEER_TILT_WITH_POINTER : W_STEER_TILT;
   const tForBlend = tiltInputOn && !padSteerActive ? tiltFiltered : 0;
 
-  const steerWeightedUnclamped =
-    kSteer * W_STEER_KEY +
-    pSteer * W_STEER_PAD +
-    ptr * W_STEER_POINTER +
-    aimG * W_STEER_MOUSE +
-    tForBlend * tiltWeight;
+  let steerWeightedUnclamped = 0;
+  if (padSteerActive) {
+    steerWeightedUnclamped = pSteer * W_STEER_PAD;
+  } else if (pointerDriving) {
+    steerWeightedUnclamped = ptr * W_STEER_POINTER;
+  } else if (Math.abs(kSteer) > 1e-4) {
+    // Teclado manda; mouse aporta ajuste fino sin pelear el giro.
+    steerWeightedUnclamped = kSteer * W_STEER_KEY + aimG * 0.22;
+  } else {
+    steerWeightedUnclamped = aimG * W_STEER_MOUSE;
+  }
+  steerWeightedUnclamped += tForBlend * tiltWeight;
   const steerWeighted = Math.max(-1, Math.min(1, steerWeightedUnclamped));
 
   const pureMouseSteer =
