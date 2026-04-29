@@ -34,7 +34,8 @@ function buildControlPoints(): THREE.Vector3[] {
     c1.clone().lerp(c2, 0.25),
     c1.clone().lerp(c2, 0.55),
     c2,
-    c2.clone().add(new THREE.Vector3(0, 0, -28)),
+    /** Rodaje corto tras la tercera parada (no extender ciudad al infinito). */
+    c2.clone().add(new THREE.Vector3(0, 0, -10)),
   ];
 }
 

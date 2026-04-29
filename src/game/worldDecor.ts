@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { WORLD_CITY_END_Z } from '../track/config';
 import { getFacadeRoughnessMap, getGlassMaskMap, getSidewalkMap } from '../lib/proceduralTextures';
 import { createBuildingFacadeMaterial, createSkylineFacadeMaterial } from '../lib/cityShaders';
 
@@ -618,10 +619,11 @@ export function addCityscape(scene: THREE.Scene): void {
   const root = new THREE.Group();
   root.name = 'cityscape';
 
-  const zCenter = -160;
-  const zSpan = 400;
-  const zStart = -400;
+  /** Borde sur: sin bloques ni farolas más allá del fin de ciudad. */
+  const zStart = WORLD_CITY_END_Z - 14;
   const zEnd = 55;
+  const zCenter = (zStart + zEnd) * 0.5;
+  const zSpan = zEnd - zStart;
 
   const sidewalkMap = getSidewalkMap();
   const sidewalkMat = new THREE.MeshStandardMaterial({
@@ -632,7 +634,7 @@ export function addCityscape(scene: THREE.Scene): void {
     emissive: 0x0,
     emissiveIntensity: 0,
   });
-  const swLen = 440;
+  const swLen = zSpan + 48;
   const swGeo = new THREE.PlaneGeometry(5.6, swLen);
   const swL = new THREE.Mesh(swGeo, sidewalkMat);
   swL.rotation.x = -Math.PI / 2;
@@ -658,8 +660,8 @@ export function addCityscape(scene: THREE.Scene): void {
   curbR.position.set(9, 0.12, zCenter);
   root.add(curbR);
 
-  addPerimeterStreets(root, zCenter, 440);
-  addCrossStreetPatches(root, [-48, -105, -152, -198, -245, -292, -338]);
+  addPerimeterStreets(root, zCenter, zSpan + 40);
+  addCrossStreetPatches(root, [-48, -105, -152, -198, -245, -292, Math.min(-338, zStart + 8)]);
   addPlazaBands(root, zCenter, zSpan);
   addAerialWires(root, zStart, zEnd);
 
@@ -668,19 +670,58 @@ export function addCityscape(scene: THREE.Scene): void {
   addDistantSkyline(root, zStart + 4, zEnd, 100);
 
   addWindowFuzz(root, zStart, zEnd, 220, { lo: 10, hi: 32 });
-  addFacadeColorBands(root, 40, -372);
-  addStorefrontRhythm(root, 40, -372);
+  const zDecorSouth = zStart - 26;
+  addFacadeColorBands(root, 40, zDecorSouth);
+  addStorefrontRhythm(root, 40, zDecorSouth);
 
-  addLampRow(root, 1, 48, -380, 16, 0.15);
-  addLampRow(root, -1, 40, -375, 17, -0.1);
+  addLampRow(root, 1, 48, zDecorSouth - 8, 16, 0.15);
+  addLampRow(root, -1, 40, zDecorSouth - 3, 17, -0.1);
 
-  addStylizedTrees(root, 1, 38, -370, 14, 11);
-  addStylizedTrees(root, -1, 42, -368, 14, 13);
-  addCornerGreenery(root, 38, -372);
-  addStreetProps(root, 38, -372);
+  addStylizedTrees(root, 1, 38, zDecorSouth, 14, 11);
+  addStylizedTrees(root, -1, 42, zDecorSouth + 2, 14, 13);
+  addCornerGreenery(root, 38, zDecorSouth);
+  addStreetProps(root, 38, zDecorSouth);
 
   // Add building collision barriers
   addBuildingCollisionBarriers(root, zStart, zEnd);
 
   scene.add(root);
+}
+
+/** Límite visible de ciudad al sur de la ruta (plano transversal). */
+export function addEndOfCityBoundary(scene: THREE.Scene): void {
+  const z = WORLD_CITY_END_Z;
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(140, 26, 5),
+    new THREE.MeshStandardMaterial({
+      color: 0x475569,
+      roughness: 0.88,
+      metalness: 0.06,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    }),
+  );
+  wall.position.set(0, 13, z);
+  scene.add(wall);
+
+  const c = document.createElement('canvas');
+  c.width = 640;
+  c.height = 120;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = 'rgba(15,23,42,0.75)';
+  ctx.fillRect(8, 8, 624, 104);
+  ctx.strokeStyle = 'rgba(148,163,184,0.5)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(8, 8, 624, 104);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = 'bold 32px system-ui,sans-serif';
+  ctx.fillText('Fin de la ciudad', 40, 74);
+  const tex = new THREE.CanvasTexture(c);
+  const spr = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  spr.position.set(0, 22, z + 2);
+  spr.scale.set(28, 5.25, 1);
+  scene.add(spr);
 }

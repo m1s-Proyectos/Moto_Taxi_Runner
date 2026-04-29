@@ -36,6 +36,19 @@ export const CHECKPOINTS: readonly CheckpointDef[] = [
   },
 ];
 
+/**
+ * Fin de ciudad jugable (coordenada Z): más allá no debe haber edificios ni carretera “abierta”.
+ * Coincide aproximadamente con el final de la spline tras la tercera parada.
+ */
+export const WORLD_CITY_END_Z = CHECKPOINTS[2]!.center.z - 24;
+
+/** Textos para marcadores flotantes en cada parada (índice 0 = primera parada). */
+export const STOP_MARKER_LABELS: readonly string[] = [
+  'Primera Parada',
+  'Segunda Parada',
+  'Tercera Parada',
+];
+
 export type ObstacleMotion = {
   /** Extremos del recorrido en Z (dirección de la calle, ida y vuelta). */
   z0: number;
@@ -155,7 +168,7 @@ export const TURBO_PICKUP_DEFS: readonly {
 export const MINIMAP = {
   xMin: -16,
   xMax: 16,
-  zMin: -360,
+  zMin: -340,
   zMax: 12,
 } as const;
 

@@ -1,7 +1,29 @@
 import type { BikeStyle } from '../game/bikeModels';
+import { ensureLocalFreeProfile } from '../lib/localFreeProfile';
+import {
+  createRoomAndJoin,
+  formatRoomCodeDisplay,
+  isRoomHost,
+  joinRoomByCode,
+  leaveRoomMember,
+  normalizeRoomCodeInput,
+  subscribeToRoomSync,
+  type RoomMemberRow,
+  type RoomSyncHandle,
+} from '../lib/roomMembers';
+import { isSupabaseConfigured } from '../lib/supabase';
 import { icArrow, icCheck, icCopy, icHash, icHome, icPin, icUser } from './icons';
 
 export type GameUiMode = 'practice' | 'multi';
+
+/**
+ * Contexto multiplayer pasado a `onStart` cuando la sesión arranca desde una sala.
+ * `MotoGame` lo usa para emitir y recibir posiciones de fantasma.
+ */
+export type MultiplayerGameCtx = {
+  playerId: string;
+  syncHandle: RoomSyncHandle;
+};
 
 /** Modo de sesión: libre = lógica actual; contrarreloj = límite de tiempo. */
 export type SessionGameMode = 'free' | 'time_attack';
@@ -100,9 +122,10 @@ const sessionModeBtnOff = ' border-zinc-800 bg-zinc-950/50 hover:border-cyan-500
 export function buildGameUi(
   container: HTMLElement,
   handlers: {
-    onStart: (sessionMode: SessionGameMode) => void;
+    onStart: (sessionMode: SessionGameMode, mpCtx?: MultiplayerGameCtx | null) => void;
     onModeChange: (mode: GameUiMode) => void;
-    onCopyRoom: () => void;
+    /** Opcional; si no hay sala Supabase, `buildGameUi` copia el código mostrado. */
+    onCopyRoom?: () => void;
     onFinishAgain: () => void;
     onFinishClose: () => void;
     initialBikeStyle: BikeStyle;
@@ -497,34 +520,35 @@ export function buildGameUi(
           </div>
         </div>
         <div data-panel="multi" class="mt-6 hidden flex flex-col gap-6">
-          <div class="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center text-xs font-medium text-amber-200/90">Multijugador en desarrollo (Fase 3): salas y tiempos en servidor.</div>
+          <div data-role="multi-banner" class="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center text-xs font-medium text-amber-200/90">
+            Fase 3: sala por código; los corredores se actualizan en tiempo real con Supabase.
+          </div>
           <div class="flex flex-col gap-2.5">
-            <label class="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Código de Sala</label>
-            <button type="button" data-role="room-btn" class="group flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 opacity-60 transition-all">
+            <label class="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Código de sala</label>
+            <button type="button" data-role="room-btn" class="group flex w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/80 p-3 opacity-60 transition-all hover:border-zinc-700">
               <div class="flex items-center gap-3">
                 <span class="text-zinc-500">${icHash}</span>
                 <span data-role="room-code" class="font-mono text-2xl font-medium tracking-[0.2em] text-zinc-100">— — — —</span>
               </div>
-              <div class="flex items-center gap-1.5 rounded bg-zinc-800/50 px-2.5 py-1 text-xs font-medium text-zinc-500">
+              <div class="flex items-center gap-1.5 rounded bg-zinc-800/50 px-2.5 py-1 text-xs font-medium text-zinc-400">
                 ${icCopy}
                 Copiar
               </div>
             </button>
           </div>
+          <div class="flex flex-col gap-2">
+            <label class="text-[10px] font-medium uppercase tracking-widest text-zinc-500" for="mtr-join-code">Unirse con código</label>
+            <div class="flex gap-2">
+              <input id="mtr-join-code" type="text" data-role="join-code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ej. XK7P"
+                class="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2 font-mono text-sm uppercase tracking-widest text-zinc-100 outline-none ring-amber-500/0 transition placeholder:text-zinc-600 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/20" />
+              <button type="button" data-role="join-room" class="shrink-0 rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-500/15">
+                Unirse
+              </button>
+            </div>
+          </div>
           <div class="flex flex-col gap-3">
             <label class="text-[10px] font-medium uppercase tracking-widest text-zinc-500">Corredores</label>
-            <div class="flex flex-col gap-2">
-              <div class="flex items-center justify-between rounded-lg border border-zinc-800/60 bg-zinc-800/20 p-2.5">
-                <div class="flex items-center gap-3">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500">${icUser}</div>
-                  <span class="text-sm font-medium text-zinc-100">Tú</span>
-                </div>
-                <span class="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-amber-500">Listo</span>
-              </div>
-              <div class="flex h-[54px] items-center justify-center rounded-lg border border-dashed border-zinc-800/30 bg-zinc-950/20">
-                <span class="text-xs font-medium text-zinc-600">Esperando jugadores…</span>
-              </div>
-            </div>
+            <div data-role="runners-list" class="flex flex-col gap-2" aria-live="polite"></div>
           </div>
         </div>
       </div>
@@ -576,6 +600,10 @@ export function buildGameUi(
   const startLabel = q(menuOverlay, '[data-role="start-label"]');
   const roomCodeText = q(menuOverlay, '[data-role="room-code"]');
   const btnCopy = q(menuOverlay, '[data-role="room-btn"]') as HTMLButtonElement;
+  const multiBanner = q(menuOverlay, '[data-role="multi-banner"]');
+  const runnersList = q(menuOverlay, '[data-role="runners-list"]');
+  const joinCodeInput = q(menuOverlay, '[data-role="join-code"]') as HTMLInputElement;
+  const btnJoinRoom = q(menuOverlay, '[data-role="join-room"]') as HTMLButtonElement;
   const finishTitle = q(finishOverlay, '[data-role="finish-title"]');
   const finishTime = q(finishOverlay, '[data-role="finish-time"]');
   const finishCloud = q(finishOverlay, '[data-role="finish-cloud"]');
@@ -589,7 +617,154 @@ export function buildGameUi(
     backHomeRow.classList.add('hidden');
   }
 
+  let mpUnsub: (() => void) | null = null;
+  let mpSync: RoomSyncHandle | null = null;
+  let mpRoomCode: string | null = null;
+  let mpPlayerId: string | null = null;
+  let mpEntering = false;
+  let menuUiMode: GameUiMode = 'practice';
+
+  function escapeUi(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderRunnersList(members: RoomMemberRow[], selfId: string): void {
+    runnersList.textContent = '';
+    if (members.length === 0) {
+      const empty = document.createElement('div');
+      empty.className =
+        'flex min-h-[54px] items-center justify-center rounded-lg border border-dashed border-zinc-800/30 bg-zinc-950/20 px-2';
+      empty.innerHTML =
+        '<span class="text-xs font-medium text-zinc-600">Nadie en la sala aún</span>';
+      runnersList.appendChild(empty);
+      return;
+    }
+    for (const m of members) {
+      const row = document.createElement('div');
+      const isSelf = m.player_id === selfId;
+      const label = m.display_name?.trim() || `${m.player_id.slice(0, 8)}…`;
+      row.className =
+        'flex items-center justify-between rounded-lg border border-zinc-800/60 bg-zinc-800/20 p-2.5';
+      row.innerHTML = `
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500">${icUser}</div>
+          <span class="min-w-0 truncate text-sm font-medium text-zinc-100">${escapeUi(label)}</span>
+        </div>
+        <span class="shrink-0 rounded-md border px-2 py-1 text-[10px] font-medium uppercase tracking-wider ${
+          isSelf
+            ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+            : 'border-zinc-600/40 bg-zinc-900/50 text-zinc-400'
+        }">${isSelf ? 'Tú' : 'En sala'}</span>`;
+      runnersList.appendChild(row);
+    }
+  }
+
+  function applyMultiplayerStartUi(members: RoomMemberRow[], selfId: string): void {
+    if (menuUiMode !== 'multi') return;
+    if (!mpRoomCode) return;
+    const host = isRoomHost(members, selfId);
+    if (host) {
+      btnStart.disabled = false;
+      startLabel.textContent = 'Iniciar carrera';
+      btnStart.classList.remove('cursor-not-allowed', 'opacity-60');
+    } else {
+      btnStart.disabled = true;
+      startLabel.textContent = 'Esperando anfitrión…';
+      btnStart.classList.add('cursor-not-allowed', 'opacity-60');
+    }
+  }
+
+  async function cleanupMultiplayerRoom(): Promise<void> {
+    mpSync = null;
+    if (mpUnsub) {
+      mpUnsub();
+      mpUnsub = null;
+    }
+    const code = mpRoomCode;
+    const pid = mpPlayerId;
+    mpRoomCode = null;
+    mpPlayerId = null;
+    if (code && pid) {
+      await leaveRoomMember(code, pid);
+    }
+  }
+
+  async function enterMultiplayerTab(): Promise<void> {
+    if (mpEntering) return;
+    mpEntering = true;
+    joinCodeInput.value = '';
+    roomCodeText.textContent = '— — — —';
+    btnCopy.classList.add('opacity-60');
+
+    try {
+      await cleanupMultiplayerRoom();
+
+      const prof = ensureLocalFreeProfile();
+      mpPlayerId = prof.id;
+
+      if (!isSupabaseConfigured()) {
+        multiBanner.textContent =
+          'Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (.env) y ejecuta la migración supabase/migrations/003_room_members_presence.sql.';
+        runnersList.innerHTML =
+          '<div class="rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-4 text-center text-xs leading-relaxed text-zinc-500">Sin Supabase: sin salas online.</div>';
+        return;
+      }
+
+      multiBanner.textContent = 'Creando sala…';
+      runnersList.innerHTML =
+        '<div class="flex min-h-[54px] items-center justify-center text-xs text-zinc-500">Conectando…</div>';
+
+      const created = await createRoomAndJoin({
+        playerId: prof.id,
+        displayName: prof.handle,
+      });
+
+      if (!created.ok) {
+        multiBanner.textContent = created.message;
+        runnersList.innerHTML = `<div class="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-center text-xs text-red-300/95">${escapeUi(
+          created.message,
+        )}</div>`;
+        return;
+      }
+
+      mpRoomCode = created.roomCode;
+      roomCodeText.textContent = formatRoomCodeDisplay(created.roomCode);
+      btnCopy.classList.remove('opacity-60');
+      multiBanner.textContent =
+        'Comparte el código o usa «Unirse» en otro dispositivo con el mismo código. La lista se actualiza en vivo.';
+
+      const sync = subscribeToRoomSync(created.roomCode, {
+        onMembersChange: (members: RoomMemberRow[]) => {
+          renderRunnersList(members, prof.id);
+          applyMultiplayerStartUi(members, prof.id);
+        },
+        onStartRaceBroadcast: () => {
+          if (menuOverlay.classList.contains('hidden')) return;
+          const mpCtx: MultiplayerGameCtx | null = mpSync
+            ? { playerId: prof.id, syncHandle: mpSync }
+            : null;
+          handlers.onStart(sessionMode, mpCtx);
+        },
+      });
+      if (!sync) {
+        multiBanner.textContent = 'No se pudo conectar al canal en tiempo real.';
+        mpSync = null;
+        mpUnsub = null;
+        return;
+      }
+      mpSync = sync;
+      mpUnsub = () => sync.unsubscribe();
+    } finally {
+      mpEntering = false;
+    }
+  }
+
   const applyMode = (m: GameUiMode) => {
+    menuUiMode = m;
     handlers.onModeChange(m);
     if (m === 'practice') {
       toggleSlider.style.left = '4px';
@@ -602,6 +777,7 @@ export function buildGameUi(
       btnStart.disabled = false;
       startLabel.textContent = 'Arrancar Motor';
       btnStart.classList.remove('cursor-not-allowed', 'opacity-60');
+      void cleanupMultiplayerRoom();
     } else {
       toggleSlider.style.left = 'calc(50% - 0px)';
       btnMulti.classList.add('text-zinc-50');
@@ -611,8 +787,9 @@ export function buildGameUi(
       practicePanel.classList.add('hidden');
       multiPanel.classList.remove('hidden');
       btnStart.disabled = true;
-      startLabel.textContent = 'Próximamente';
+      startLabel.textContent = 'Conectando…';
       btnStart.classList.add('cursor-not-allowed', 'opacity-60');
+      void enterMultiplayerTab();
     }
   };
 
@@ -648,11 +825,96 @@ export function buildGameUi(
   btnMulti.addEventListener('click', () => applyMode('multi'));
   applyMode('practice');
 
-  btnStart.addEventListener('click', () => {
+  btnStart.addEventListener('click', async () => {
     if (btnStart.disabled) return;
-    handlers.onStart(sessionMode);
+    if (menuUiMode === 'practice') {
+      handlers.onStart(sessionMode);
+      return;
+    }
+    if (!mpSync) return;
+    const r = await mpSync.sendStartRace();
+    if (!r.ok) {
+      multiBanner.textContent = r.message;
+    }
   });
-  btnCopy.addEventListener('click', () => handlers.onCopyRoom());
+
+  joinCodeInput.addEventListener('input', () => {
+    joinCodeInput.value = normalizeRoomCodeInput(joinCodeInput.value);
+  });
+
+  btnJoinRoom.addEventListener('click', async () => {
+    if (!isSupabaseConfigured()) return;
+    const target = normalizeRoomCodeInput(joinCodeInput.value);
+    if (target.length !== 4) {
+      multiBanner.textContent = 'Introduce un código de 4 caracteres.';
+      return;
+    }
+    const prof = ensureLocalFreeProfile();
+    mpPlayerId = prof.id;
+    multiBanner.textContent = 'Uniendo…';
+
+    mpSync = null;
+    if (mpUnsub) {
+      mpUnsub();
+      mpUnsub = null;
+    }
+    const prevCode = mpRoomCode;
+    mpRoomCode = null;
+    if (prevCode) {
+      await leaveRoomMember(prevCode, prof.id);
+    }
+
+    const r = await joinRoomByCode({
+      roomCode: target,
+      playerId: prof.id,
+      displayName: prof.handle,
+    });
+    if (!r.ok) {
+      multiBanner.textContent = r.message;
+      void enterMultiplayerTab();
+      return;
+    }
+
+    mpRoomCode = target;
+    roomCodeText.textContent = formatRoomCodeDisplay(target);
+    btnCopy.classList.remove('opacity-60');
+    multiBanner.textContent = `En sala ${formatRoomCodeDisplay(target)} · lista en vivo.`;
+
+    const sync = subscribeToRoomSync(target, {
+      onMembersChange: (members: RoomMemberRow[]) => {
+        renderRunnersList(members, prof.id);
+        applyMultiplayerStartUi(members, prof.id);
+      },
+      onStartRaceBroadcast: () => {
+        if (menuOverlay.classList.contains('hidden')) return;
+        const mpCtx: MultiplayerGameCtx | null = mpSync
+          ? { playerId: prof.id, syncHandle: mpSync }
+          : null;
+        handlers.onStart(sessionMode, mpCtx);
+      },
+    });
+    if (!sync) {
+      multiBanner.textContent = 'No se pudo conectar al canal en tiempo real.';
+      mpSync = null;
+      mpUnsub = null;
+      return;
+    }
+    mpSync = sync;
+    mpUnsub = () => sync.unsubscribe();
+  });
+
+  btnCopy.addEventListener('click', async () => {
+    const raw = roomCodeText.textContent ?? '';
+    const code = normalizeRoomCodeInput(raw.replace(/\s/g, ''));
+    if (code.length === 4) {
+      try {
+        await navigator.clipboard.writeText(code);
+      } catch {
+        /* ignore */
+      }
+    }
+    handlers.onCopyRoom?.();
+  });
   btnAgain.addEventListener('click', () => handlers.onFinishAgain());
   btnFinishClose.addEventListener('click', () => handlers.onFinishClose());
 

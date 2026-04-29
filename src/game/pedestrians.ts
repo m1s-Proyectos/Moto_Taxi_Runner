@@ -19,7 +19,7 @@ const PED_R = 0.38;
 const _world = new THREE.Vector3();
 
 /** Figura muy simple (cabeza + torso + piernas) — legible a la cámara del juego. */
-function createPedestrianFigure(shirtHex: number, pantsHex: number): THREE.Group {
+export function createPedestrianFigure(shirtHex: number, pantsHex: number): THREE.Group {
   const g = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({ color: 0xd4a574, roughness: 0.65, metalness: 0.02 });
   const shirt = new THREE.MeshStandardMaterial({ color: shirtHex, roughness: 0.72, metalness: 0.04 });

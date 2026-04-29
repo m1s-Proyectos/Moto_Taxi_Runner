@@ -85,8 +85,8 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
       <div class="hidden shrink-0 rounded-full border border-amber-300/45 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100 sm:inline-block">vibe jam</div>
     </header>
 
-    <div id="splash-hero" class="grid grid-cols-1 gap-4 px-3 py-4 sm:px-4 sm:py-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-6 md:px-8 lg:px-12">
-      <main class="relative order-2 flex flex-col justify-between gap-4 md:order-1 md:min-h-[520px]">
+    <div id="splash-hero" class="mx-auto grid w-full max-w-[1320px] grid-cols-1 gap-4 px-3 py-4 sm:px-4 sm:py-5 md:grid-cols-2 md:gap-8 md:px-8 md:py-6 lg:gap-10 lg:px-12">
+      <main class="relative order-2 flex w-full min-w-0 flex-col justify-between gap-4 md:order-1 md:min-h-[520px] md:max-w-xl md:justify-self-start lg:max-w-none">
         <div class="splash-panel max-w-[36rem] rounded-3xl border border-cyan-300/30 bg-slate-900/35 p-5 shadow-[0_0_0_1px_rgba(103,232,249,0.14),0_24px_45px_rgba(2,6,23,0.45)] backdrop-blur-2xl">
           <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-amber-300/45 bg-amber-300/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100">
             ${icBolt}
@@ -113,8 +113,8 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
         </div>
       </main>
 
-      <section class="relative order-1 flex flex-col gap-3 md:order-2 md:pt-4">
-        <div class="splash-hero relative overflow-hidden rounded-2xl border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)] sm:rounded-[1.8rem]">
+      <section class="relative order-1 flex w-full min-w-0 flex-col items-center gap-3 md:order-2 md:pt-4">
+        <div class="splash-hero relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)] sm:rounded-[1.8rem] lg:max-w-[600px]">
           <div class="pointer-events-none absolute inset-0 z-[1] [background:radial-gradient(circle_at_75%_24%,rgba(250,204,21,0.24),transparent_35%),radial-gradient(circle_at_18%_40%,rgba(56,189,248,0.24),transparent_42%),linear-gradient(145deg,rgba(8,47,73,0.44),rgba(30,41,59,0.55))]"></div>
           <div class="pointer-events-none absolute inset-0 z-[2] [background:repeating-linear-gradient(105deg,rgba(255,255,255,0.06)_0,rgba(255,255,255,0.06)_1px,transparent_1px,transparent_14px)]"></div>
 

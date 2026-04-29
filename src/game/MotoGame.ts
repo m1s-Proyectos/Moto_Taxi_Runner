@@ -3,12 +3,11 @@ import {
   CHECKPOINTS,
   CONTACT_TIME_PENALTY_MS,
   OBSTACLES,
-  PEDESTRIAN_ZONE_Z_MAX,
-  PEDESTRIAN_ZONE_Z_MIN,
   PHYS,
   PLAYER_RADIUS,
   SPAWN,
   TURBO,
+  WORLD_CITY_END_Z,
   WORLD_FLOOR_Y,
   TIME_ATTACK_LIMIT_MS,
 } from '../track/config';
@@ -50,9 +49,13 @@ import {
 import {
   buildGameUi,
   type GameUiRefs,
+  type MultiplayerGameCtx,
   type SessionGameMode,
   updateRouteSegment,
 } from '../ui/buildGameUi';
+import type { PlayerPositionPayload } from '../lib/roomMembers';
+import { OtherPlayer } from './OtherPlayer';
+import { addCheckpointStopMarkers, triggerPassengerAnim } from './passengerAnimations';
 import { drawMinimap } from '../ui/minimap';
 import { circleIntersectsObstacle, resolveCircleObstacle } from './collision';
 import {
@@ -70,15 +73,9 @@ import {
   setTiltInputOn,
   setTiltRecalibrationPending,
 } from './input';
-import {
-  addZebraCrossingOnRoad,
-  createCrossingPedestriansOnRoad,
-  getPedestrianWorldXZ,
-  updatePedestrianPositions,
-  type PedestrianInstance,
-} from './pedestrians';
+import { addZebraCrossingOnRoad } from './pedestrians';
 import { createParkedCar } from './parkedCar';
-import { addCityscape } from './worldDecor';
+import { addCityscape, addEndOfCityBoundary } from './worldDecor';
 import { tickCityShaders } from '../lib/cityShaders';
 import { getUseMobileGameUi } from '../lib/deviceInputProfile';
 import { createNightSky, type NightSky } from './nightSky';
@@ -247,6 +244,8 @@ export class MotoGame {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly clock = new THREE.Clock();
 
+  private readonly localPlayerId: string;
+
   private readonly bike = new THREE.Group();
   private readonly checkpointMeshes: THREE.Group[] = [];
   private readonly camTarget = new THREE.Vector3();
@@ -297,9 +296,6 @@ export class MotoGame {
   private lastBumpMs = 0;
   /** Evita múltiples penalizaciones por el mismo roce prolongado. */
   private wasTouchingVehicle = false;
-  private wasTouchingPedInZone = false;
-
-  private readonly pedestrians: PedestrianInstance[] = [];
 
   private readonly loopAudio = new GameLoopAudio();
   private bikeStyle: BikeStyle;
@@ -309,11 +305,14 @@ export class MotoGame {
   private readonly minimapObstacleFp: { cx: number; cz: number; hw: number; hd: number }[] = OBSTACLES.map(
     () => ({ cx: 0, cz: 0, hw: 0, hd: 0 }),
   );
-  private readonly pedWorldScratch = { x: 0, z: 0 };
   private readonly driftTrail: DriftTrail;
   private bikeDriftLastYaw: number;
   private turboPickups: TurboPickupInstance[] = [];
   private turboBoostUntilMs: number | null = null;
+
+  private mpCtx: MultiplayerGameCtx | null = null;
+  private readonly otherPlayers = new Map<string, OtherPlayer>();
+  private positionBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
   private readonly vibeJamAutoStart: boolean;
   private vibeRingExit: THREE.Group | null = null;
@@ -330,7 +329,8 @@ export class MotoGame {
   constructor(container: HTMLElement, options?: MotoGameOptions) {
     this.vibeJamAutoStart = options?.vibeJamAutoStart === true;
     this.container = container;
-    ensureLocalFreeProfile();
+    const lp = ensureLocalFreeProfile();
+    this.localPlayerId = lp.id;
 
     const initialBike = readStoredBikeStyle();
     this.bikeStyle = initialBike;
@@ -354,12 +354,12 @@ export class MotoGame {
     container.appendChild(this.renderer.domElement);
 
     this.ui = buildGameUi(container, {
-      onStart: (mode) => {
+      onStart: (mode, mpCtx) => {
         this.sessionGameMode = mode;
+        this.mpCtx = mpCtx ?? null;
         this.beginSession();
       },
       onModeChange: () => {},
-      onCopyRoom: () => this.copyRoomPlaceholder(),
       onFinishAgain: () => {
         this.ui.finishOverlay.classList.add('hidden');
         this.resetRun();
@@ -532,6 +532,19 @@ export class MotoGame {
   }
 
   dispose(): void {
+    if (this.positionBroadcastInterval !== null) {
+      clearInterval(this.positionBroadcastInterval);
+      this.positionBroadcastInterval = null;
+    }
+    if (this.mpCtx) {
+      this.mpCtx.syncHandle.setPositionHandler(null);
+      this.mpCtx = null;
+    }
+    for (const ghost of this.otherPlayers.values()) {
+      ghost.dispose();
+    }
+    this.otherPlayers.clear();
+
     window.cancelAnimationFrame(this.raf);
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
@@ -574,22 +587,44 @@ export class MotoGame {
       setTiltRecalibrationPending();
     }
     this.renderer.domElement.focus({ preventScroll: true });
+
+    if (this.mpCtx) {
+      this.mpCtx.syncHandle.setPositionHandler((payload) =>
+        this.onRemotePosition(payload),
+      );
+      this.startPositionBroadcast();
+    }
+  }
+
+  private startPositionBroadcast(): void {
+    if (this.positionBroadcastInterval !== null) return;
+    this.positionBroadcastInterval = setInterval(() => {
+      if (!this.mpCtx || !this.sessionStarted) return;
+      const payload: PlayerPositionPayload = {
+        pid: this.mpCtx.playerId,
+        x: this.bike.position.x,
+        y: this.bike.position.y,
+        z: this.bike.position.z,
+        ry: this.bike.rotation.y,
+      };
+      this.mpCtx.syncHandle.sendPosition(payload);
+    }, 100);
+  }
+
+  private onRemotePosition(payload: PlayerPositionPayload): void {
+    if (!this.mpCtx || payload.pid === this.mpCtx.playerId) return;
+    let ghost = this.otherPlayers.get(payload.pid);
+    if (!ghost) {
+      ghost = new OtherPlayer(this.scene);
+      this.otherPlayers.set(payload.pid, ghost);
+    }
+    ghost.applyRemoteState(payload.x, payload.y, payload.z, payload.ry);
   }
 
   private applyBikeStyle(style: BikeStyle): void {
     this.bikeStyle = style;
     writeStoredBikeStyle(style);
     mountBikeStyle(this.bike, style);
-  }
-
-  private copyRoomPlaceholder(): void {
-    const code = 'VJ26';
-    void navigator.clipboard?.writeText(code).then(
-      () => {
-        this.ui.roomCodeText.textContent = code;
-      },
-      () => {},
-    );
   }
 
   private onResize = (): void => {
@@ -692,15 +727,9 @@ export class MotoGame {
     addRoadCenterDashes(this.scene, 0.022, { tStep: 0.03, dashLen: 1.4, dashW: 0.36 });
 
     addCityscape(this.scene);
+    addEndOfCityBoundary(this.scene);
 
     addZebraCrossingOnRoad(this.scene);
-    const peds = createCrossingPedestriansOnRoad(this.scene, 7);
-    this.pedestrians.length = 0;
-    for (const p of peds) {
-      this.pedestrians.push(p);
-      this.scene.add(p.group);
-    }
-
     this.obstacleCarGroups.length = 0;
     OBSTACLES.forEach((o, i) => {
       const g = createParkedCar(o, i);
@@ -737,6 +766,8 @@ export class MotoGame {
       this.scene.add(g);
       this.checkpointMeshes.push(g);
     }
+
+    addCheckpointStopMarkers(this.scene);
 
     this.turboPickups = createDefaultTurboPickups(this.scene);
     addTrafficLightsToScene(this.scene);
@@ -887,7 +918,6 @@ export class MotoGame {
     this.currentSteer = 0;
     this.lastBumpMs = 0;
     this.wasTouchingVehicle = false;
-    this.wasTouchingPedInZone = false;
     this.vibePortalExitDone = false;
     this.vibePortalBackDone = false;
     this.hidePcControlsHint();
@@ -979,6 +1009,14 @@ export class MotoGame {
     this.speed = 0;
     this.phase = 'exchange';
     const now = performance.now();
+    const stopNum = this.nextCheckpointIndex + 1;
+    triggerPassengerAnim({
+      scene: this.scene,
+      bike: this.bike,
+      playerId: this.localPlayerId,
+      stopNumber: stopNum,
+      kind: 'dropoff',
+    });
     if (isLastCheckpoint) {
       this.exchangeMode = 'final_drop';
       this.exchangeUntilMs = now + 1350;
@@ -1322,8 +1360,6 @@ export class MotoGame {
     const brake = PHYS.brake;
     const drag = PHYS.drag;
 
-    updatePedestrianPositions(this.pedestrians, performance.now() * 0.001, 6.35);
-
     const nowTick = performance.now();
     if (this.turboBoostUntilMs !== null && nowTick >= this.turboBoostUntilMs) {
       this.turboBoostUntilMs = null;
@@ -1352,6 +1388,13 @@ export class MotoGame {
           this.exchangeMode = 'pick';
           this.exchangeUntilMs = nowTick + 1200;
           this.showPassengerHud('up', 'Subiendo pasajero…');
+          triggerPassengerAnim({
+            scene: this.scene,
+            bike: this.bike,
+            playerId: this.localPlayerId,
+            stopNumber: this.nextCheckpointIndex + 1,
+            kind: 'pickup',
+          });
         } else if (this.exchangeMode === 'pick') {
           this.completeMidStop();
           this.phase = 'racing';
@@ -1376,6 +1419,13 @@ export class MotoGame {
         this.phase = 'boarding';
         this.boardingUntilMs = nowTick + 850;
         this.showPassengerHud('up', 'Subiendo pasajero…');
+        triggerPassengerAnim({
+          scene: this.scene,
+          bike: this.bike,
+          playerId: this.localPlayerId,
+          stopNumber: 0,
+          kind: 'pickup',
+        });
         this.showSessionStartHintForInitialBoarding();
       }
 
@@ -1505,32 +1555,6 @@ export class MotoGame {
         }
         this.wasTouchingVehicle = touchingVehicle;
 
-        const inPedZone = z >= PEDESTRIAN_ZONE_Z_MIN && z <= PEDESTRIAN_ZONE_Z_MAX;
-        let touchingPedInZone = false;
-        if (!greenFreePass) {
-          for (const ped of this.pedestrians) {
-            getPedestrianWorldXZ(ped, this.pedWorldScratch);
-            const px = this.pedWorldScratch.x;
-            const pz = this.pedWorldScratch.z;
-            const dx = x - px;
-            const dz = z - pz;
-            const dist = Math.hypot(dx, dz);
-            const rr = PLAYER_RADIUS + ped.radius;
-            if (dist < rr && dist > 1e-5) {
-              if (inPedZone) touchingPedInZone = true;
-              x = px + (dx / dist) * rr;
-              z = pz + (dz / dist) * rr;
-              this.speed *= 0.15;
-              // Force position update immediately
-              this.bike.position.set(x, this.bike.position.y, z);
-            }
-          }
-        }
-        if (touchingPedInZone && !this.wasTouchingPedInZone) {
-          this.applyContactTimePenalty();
-        }
-        this.wasTouchingPedInZone = touchingPedInZone;
-
         const lat = getLateralDistanceToRoadMeters(x, z);
         const off = getOffroadSeverity(lat);
         if (off > 0) {
@@ -1543,6 +1567,12 @@ export class MotoGame {
           x = Math.sign(x) * 10.5;
           this.speed *= 0.1;
           this.bike.position.set(x, this.bike.position.y, z);
+        }
+
+        if (z < WORLD_CITY_END_Z) {
+          z = WORLD_CITY_END_Z;
+          this.speed *= 0.42;
+          this.bike.position.z = z;
         }
 
         const pickR = TURBO.pickupRadius + PLAYER_RADIUS * 0.88;
@@ -1567,7 +1597,6 @@ export class MotoGame {
         }
       } else {
         this.wasTouchingVehicle = false;
-        this.wasTouchingPedInZone = false;
       }
       this.bike.position.x = x;
       this.bike.position.z = z;
@@ -1677,6 +1706,10 @@ export class MotoGame {
       .add(forward.clone().multiplyScalar(this.cameraLook))
       .add(new THREE.Vector3(0, 1.1, 0));
     this.camera.lookAt(this.camTarget);
+
+    for (const ghost of this.otherPlayers.values()) {
+      ghost.update(dt);
+    }
 
     this.nightSky?.update(this.camera);
     tickCityShaders(tSec);
