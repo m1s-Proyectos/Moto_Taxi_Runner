@@ -96,8 +96,8 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
             <span class="block bg-gradient-to-r from-white via-amber-100 to-amber-300 bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(253,224,71,0.4)]">MotoTaxi</span>
             <span class="block bg-gradient-to-r from-cyan-200 via-sky-300 to-fuchsia-300 bg-clip-text text-transparent drop-shadow-[0_0_28px_rgba(34,211,238,0.42)]">Runner</span>
           </h1>
-          <p class="mt-3 max-w-[32ch] text-sm font-medium leading-relaxed text-slate-200/85">
-            Ciudad premium, reflejos neón y velocidad total. El mismo mototaxi icónico ahora en una portada de alto impacto.
+          <p class="mt-3 max-w-[34ch] text-sm font-extrabold uppercase leading-relaxed tracking-[0.08em] text-cyan-100/95 [text-shadow:0_0_16px_rgba(34,211,238,0.35),0_0_24px_rgba(251,191,36,0.2)]">
+            Every fare is a race. Outrun every rival, grow your empire, and rule the streets.
           </p>
         </div>
 
@@ -148,7 +148,7 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
           </div>
 
           <!-- Área del botón CTA -->
-          <div class="relative z-[4] flex justify-center overflow-hidden border-t border-white/12 px-4 py-3 sm:px-5 sm:py-4">
+          <div class="relative z-[4] flex flex-col items-center justify-center gap-2 overflow-hidden border-t border-white/12 px-4 py-3 sm:gap-2.5 sm:px-5 sm:py-4">
             <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
               class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-22 blur-md [filter:saturate(1.25)_brightness(0.80)]"
               decoding="async" />

@@ -278,6 +278,11 @@ export class MotoGame {
   private boardingUntilMs: number | null = null;
   private exchangeUntilMs: number | null = null;
   private exchangeMode: 'drop' | 'pick' | 'final_drop' | null = null;
+  /**
+   * Bloquea movimiento al entrar en fase `racing` hasta detectar aceleración manual.
+   * Conserva el launch speed actual, pero evita cualquier avance automático.
+   */
+  private awaitingManualLaunch = false;
   private pcControlsHintTimeout: number | null = null;
 
   private speed = 0;
@@ -830,6 +835,7 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.exchangeMode = null;
     this.speed = 0;
+    this.awaitingManualLaunch = false;
     this.currentSteer = 0;
     this.lastBumpMs = 0;
     this.wasTouchingVehicle = false;
@@ -1287,7 +1293,7 @@ export class MotoGame {
       this.speed = 0;
       if (this.boardingUntilMs !== null && nowTick >= this.boardingUntilMs) {
         this.phase = 'racing';
-        this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
+        this.awaitingManualLaunch = true;
         this.boardingUntilMs = null;
         this.hidePassengerHud();
       }
@@ -1301,7 +1307,7 @@ export class MotoGame {
         } else if (this.exchangeMode === 'pick') {
           this.completeMidStop();
           this.phase = 'racing';
-          this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
+          this.awaitingManualLaunch = true;
           this.exchangeMode = null;
           this.exchangeUntilMs = null;
           this.hidePassengerHud();
@@ -1371,8 +1377,19 @@ export class MotoGame {
         this.speed = Math.sign(this.speed) * Math.max(0, Math.abs(this.speed) - b);
       }
 
-      const throttle = canDrive ? input.throttle : 0;
-      if (canDrive) {
+      if (canDrive && this.awaitingManualLaunch) {
+        // Idle estricto: sin aceleración manual no hay movimiento residual ni auto-cruise.
+        this.speed = 0;
+        if (input.throttle > 0) {
+          // Conserva el "feel" de arranque actual (launch speed), pero solo tras input del jugador.
+          this.awaitingManualLaunch = false;
+          this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
+        }
+      }
+
+      const canApplyDrivePhysics = canDrive && !this.awaitingManualLaunch;
+      const throttle = canApplyDrivePhysics ? input.throttle : 0;
+      if (canApplyDrivePhysics) {
         const steerMag = Math.abs(this.currentSteer);
         const speedNorm = Math.min(1, Math.abs(this.speed) / maxSpeed);
         this.speed += throttle * accel * dt;
@@ -1402,7 +1419,7 @@ export class MotoGame {
         if (Math.abs(this.speed) < 0.04) this.speed = 0;
       }
 
-      if (canDrive) {
+      if (canApplyDrivePhysics) {
         // Solo desplazamiento hacia adelante en local: el arco del giro lo da yaw + translateZ
         // (el antiguo empuje en X con sin(yaw) sumaba derrape lateral falso y poco controlable al girar)
         this.bike.translateZ(-this.speed * dt);
@@ -1418,7 +1435,7 @@ export class MotoGame {
 
       let x = this.bike.position.x;
       let z = this.bike.position.z;
-      if (canDrive) {
+      if (canApplyDrivePhysics) {
         const greenFreePass = isInActiveGreenCorridor(x, z);
         let touchingVehicle = false;
         if (!greenFreePass) {
