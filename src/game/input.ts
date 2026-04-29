@@ -40,15 +40,21 @@ let tiltCalAccB = 0;
 let tiltCalCountG = 0;
 let tiltCalCountB = 0;
 let tiltCalTicks = 0;
-let tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null;
-let tiltHandlerAttached = false;
+/** Listener `deviceorientation` (iOS, fallback Android). */
+let tiltHandler: ((e: Event) => void) | null = null;
+let tiltRelativeAttached = false;
+/** Listener `deviceorientationabsolute` (Chrome Android estable, fuente única si existe). */
+let tiltAbsoluteHandler: ((e: Event) => void) | null = null;
 let tiltAbsoluteAttached = false;
 let tiltLastEventAtMs = 0;
 let tiltEventCount = 0;
+/** Valores crudos del último evento (debug UI). */
 let tiltLastGamma: number | null = null;
 let tiltLastBeta: number | null = null;
+let tiltLastAlpha: number | null = null;
 let tiltLastSrc: 'orientation' | 'orientationabsolute' | null = null;
 let orientationSteer = 0;
+let tiltDebugLastConsoleMs = 0;
 
 /** Diagnóstico activable con `?tiltdebug=1`. Sin coste si no está activo. */
 const TILT_DEBUG = ((): boolean => {
@@ -63,6 +69,27 @@ function tiltLog(...args: unknown[]): void {
   if (TILT_DEBUG) {
     console.log('[tilt]', ...args);
   }
+}
+
+function isLikelyAndroid(): boolean {
+  return typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent ?? '');
+}
+
+/**
+ * En landscape el volante (roll izq/dcha) alinea mejor tras intercambiar beta↔gamma respecto al modelo portrait.
+ * Los valores crudos del evento siguen guardándose en tiltLast* para debug; solo el procesamiento de giro usa el swap.
+ */
+function normalizeBetaGammaForLandscapeSteering(
+  beta: number | null,
+  gamma: number | null,
+): { beta: number | null; gamma: number | null } {
+  const w = typeof window !== 'undefined' ? window.innerWidth : 0;
+  const h = typeof window !== 'undefined' ? window.innerHeight : 0;
+  const landscape = w > 0 && h > 0 && w > h;
+  if (!landscape) {
+    return { beta, gamma };
+  }
+  return { beta: gamma, gamma: beta };
 }
 const TILT_CAL_MIN = 3;
 const TILT_CAL_MAX_WAIT = 18;
@@ -267,6 +294,7 @@ function resetTiltCalibration(): void {
   tiltFiltered = 0;
   tiltHasSample = false;
   tiltLastSampleAtMs = 0;
+  tiltLastAlpha = null;
 }
 
 function applyDeadzoneNormalized(v: number, dz: number): number {
@@ -345,22 +373,31 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent, src: 'orientation'
     tiltSteerRaw = 0;
     return;
   }
-  const b = e.beta;
-  const g = e.gamma;
+
+  const rawA = e.alpha != null && Number.isFinite(e.alpha) ? e.alpha : null;
+  const rawB = e.beta != null && Number.isFinite(e.beta) ? e.beta : null;
+  const rawG = e.gamma != null && Number.isFinite(e.gamma) ? e.gamma : null;
+
+  tiltLastAlpha = rawA;
+  tiltLastBeta = rawB;
+  tiltLastGamma = rawG;
+
+  const { beta: b, gamma: g } = normalizeBetaGammaForLandscapeSteering(rawB, rawG);
+
   tiltLastEventAtMs = performance.now();
   tiltEventCount++;
   tiltLastSrc = src;
-  if (b == null && g == null) {
+
+  if (rawB == null && rawG == null) {
     if (TILT_DEBUG && tiltEventCount % 30 === 1) {
       tiltLog('event with null gamma/beta from', src, '— sensor not delivering values');
     }
     return;
   }
-  tiltLastGamma = g;
-  tiltLastBeta = b;
+
   tiltHasSample = true;
   if (TILT_DEBUG && tiltEventCount === 1) {
-    tiltLog('first event from', src, { gamma: g, beta: b });
+    tiltLog('first event from', src, { alpha: rawA, gamma: rawG, beta: rawB });
   }
 
   if (tiltRefG === null) {
@@ -375,7 +412,6 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent, src: 'orientation'
   orientationSteer = relativeSteerFromTilt(b, g, rG, rB);
   const shaped = shapeTiltSteer(Math.max(-1, Math.min(1, orientationSteer)));
 
-  // Filtro anti-picos para vibraciones/ruido del sensor.
   const nowMs = performance.now();
   const dt = tiltLastSampleAtMs > 0 ? Math.max(0.001, (nowMs - tiltLastSampleAtMs) / 1000) : 0.016;
   tiltLastSampleAtMs = nowMs;
@@ -383,21 +419,42 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent, src: 'orientation'
   const lo = tiltSteerRaw - maxDelta;
   const hi = tiltSteerRaw + maxDelta;
   tiltSteerRaw = Math.max(lo, Math.min(hi, shaped));
+
+  if (TILT_DEBUG) {
+    const t = performance.now();
+    if (t - tiltDebugLastConsoleMs > 320) {
+      tiltDebugLastConsoleMs = t;
+      const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(1));
+      console.log(
+        `Sensor Active: [${fmt(rawA)}, ${fmt(rawB)}, ${fmt(rawG)}] | src=${src} rawSteer=${tiltSteerRaw.toFixed(3)}`,
+      );
+    }
+  }
 }
 
+/**
+ * Android Chrome: `deviceorientationabsolute` como fuente única reduce salto magnético / drift.
+ * iOS / fallback: solo `deviceorientation`.
+ */
 function ensureTiltListener(): void {
-  if (tiltHandlerAttached) return;
-  tiltHandler = (e) => updateTiltFromOrientation(e, 'orientation');
-  window.addEventListener('deviceorientation', tiltHandler, { passive: true } as AddEventListenerOptions);
-  tiltHandlerAttached = true;
-  // Fallback Chrome Android: muchos dispositivos solo emiten `deviceorientationabsolute`.
-  // Suscribir AMBOS asegura recibir eventos en iOS Safari y en Chrome Android moderno.
-  if ('ondeviceorientationabsolute' in window) {
-    const absHandler = (e: Event) => updateTiltFromOrientation(e as DeviceOrientationEvent, 'orientationabsolute');
-    window.addEventListener('deviceorientationabsolute', absHandler, { passive: true } as AddEventListenerOptions);
+  if (tiltRelativeAttached || tiltAbsoluteAttached) return;
+  const android = isLikelyAndroid();
+  const hasAbs = typeof window !== 'undefined' && 'ondeviceorientationabsolute' in window;
+
+  if (android && hasAbs) {
+    tiltAbsoluteHandler = (ev: Event) =>
+      updateTiltFromOrientation(ev as DeviceOrientationEvent, 'orientationabsolute');
+    window.addEventListener('deviceorientationabsolute', tiltAbsoluteHandler, {
+      passive: true,
+    } as AddEventListenerOptions);
     tiltAbsoluteAttached = true;
-    tiltLog('attached deviceorientationabsolute');
+    tiltLog('Android: primary deviceorientationabsolute');
+    return;
   }
+
+  tiltHandler = (ev: Event) => updateTiltFromOrientation(ev as DeviceOrientationEvent, 'orientation');
+  window.addEventListener('deviceorientation', tiltHandler, { passive: true } as AddEventListenerOptions);
+  tiltRelativeAttached = true;
   tiltLog('attached deviceorientation');
 }
 
@@ -424,6 +481,7 @@ export function setTiltInputOn(on: boolean): boolean {
     tiltEventCount = 0;
     tiltLastGamma = null;
     tiltLastBeta = null;
+    tiltLastAlpha = null;
     tiltLastSrc = null;
     ensureTiltListener();
     resetTiltCalibration();
@@ -440,79 +498,101 @@ export function setTiltRecalibrationPending(): void {
 }
 
 /**
- * iOS 13+ Safari y algunos WebViews: requieren permiso explícito disparado en gesto del usuario.
- * Se piden ambos (`DeviceOrientationEvent` y `DeviceMotionEvent`) sin esperas previas para no
- * romper la cadena de gesto. Android no tiene `requestPermission`, devuelve true sin tocar nada.
+ * Solo `DeviceOrientationEvent.requestPermission()` — llamar desde el clic/tap del botón Giro (Safari iOS).
  */
-export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
+export function requestOrientationPermissionFromUserGesture(): Promise<boolean> {
   if (!isTiltSensorAvailable()) {
-    tiltLog('sensor API not available');
-    return false;
+    return Promise.resolve(false);
   }
   const Doe = DeviceOrientationEvent as unknown as {
     requestPermission?: () => Promise<PermissionState>;
   };
+  if (typeof Doe.requestPermission === 'function') {
+    return Doe.requestPermission().then((state) => {
+      tiltLog('DeviceOrientationEvent.requestPermission ->', state);
+      return state === 'granted';
+    });
+  }
+  return Promise.resolve(true);
+}
+
+/**
+ * iOS: orientación obligatoria; opcionalmente motion en segundo sitio (algunos builds lo esperan).
+ * Android: sin prompt — sigue true tras orientationOk.
+ */
+export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
+  const orientationOk = await requestOrientationPermissionFromUserGesture();
+  if (!orientationOk) return false;
   const Dme = (typeof DeviceMotionEvent !== 'undefined' ? DeviceMotionEvent : undefined) as unknown as
     | { requestPermission?: () => Promise<PermissionState> }
     | undefined;
   try {
-    if (typeof Doe.requestPermission === 'function') {
-      const o = await Doe.requestPermission();
-      tiltLog('DeviceOrientationEvent.requestPermission ->', o);
-      if (o !== 'granted') return false;
-    }
     if (Dme && typeof Dme.requestPermission === 'function') {
       const m = await Dme.requestPermission();
       tiltLog('DeviceMotionEvent.requestPermission ->', m);
-      // Si motion no está concedido, orientación todavía puede funcionar. No bloqueamos.
     }
     return true;
   } catch (err) {
-    tiltLog('requestPermission threw', err);
-    return false;
+    tiltLog('DeviceMotionEvent.requestPermission threw', err);
+    return true;
   }
 }
 
 export type TiltDebugInfo = {
   available: boolean;
   on: boolean;
+  /** true si hay cualquier listener de orientación activo. */
   attached: boolean;
+  relativeAttached: boolean;
   absoluteAttached: boolean;
   hasSample: boolean;
   eventCount: number;
   msSinceLastEvent: number;
   lastSrc: 'orientation' | 'orientationabsolute' | null;
+  lastAlpha: number | null;
   lastGamma: number | null;
   lastBeta: number | null;
   rawSteer: number;
   filteredSteer: number;
+  /** Una línea lista para overlay / log cuando `?tiltdebug=1`. */
+  sensorActiveLabel: string;
 };
 
 /** Snapshot de diagnóstico del subsistema tilt (úsalo en overlay/console). */
 export function getTiltDebugInfo(): TiltDebugInfo {
   const ms = tiltLastEventAtMs > 0 ? performance.now() - tiltLastEventAtMs : -1;
+  const fmt = (v: number | null) => (v == null ? 'null' : v.toFixed(2));
+  const sensorActiveLabel = `Sensor Active: [${fmt(tiltLastAlpha)}, ${fmt(tiltLastBeta)}, ${fmt(tiltLastGamma)}]`;
   return {
     available: isTiltSensorAvailable(),
     on: tiltInputOn,
-    attached: tiltHandlerAttached,
+    attached: tiltRelativeAttached || tiltAbsoluteAttached,
+    relativeAttached: tiltRelativeAttached,
     absoluteAttached: tiltAbsoluteAttached,
     hasSample: tiltHasSample,
     eventCount: tiltEventCount,
     msSinceLastEvent: ms,
     lastSrc: tiltLastSrc,
+    lastAlpha: tiltLastAlpha,
     lastGamma: tiltLastGamma,
     lastBeta: tiltLastBeta,
     rawSteer: tiltSteerRaw,
     filteredSteer: tiltFiltered,
+    sensorActiveLabel,
   };
 }
 
 export function disposeTiltListener(): void {
-  if (tiltHandler && tiltHandlerAttached) {
-    window.removeEventListener('deviceorientation', tiltHandler);
+  if (tiltAbsoluteHandler && tiltAbsoluteAttached) {
+    window.removeEventListener('deviceorientationabsolute', tiltAbsoluteHandler);
+    tiltAbsoluteHandler = null;
+    tiltAbsoluteAttached = false;
   }
-  tiltHandler = null;
-  tiltHandlerAttached = false;
+  if (tiltHandler && tiltRelativeAttached) {
+    window.removeEventListener('deviceorientation', tiltHandler);
+    tiltHandler = null;
+    tiltRelativeAttached = false;
+  }
   setTiltInputOn(false);
 }
 
@@ -604,7 +684,7 @@ export function pollInput(): InputState {
   const aimG = useMouseAim && !padSteerActive && !pointerDriving ? aim : 0;
 
   if (tiltInputOn) {
-    const tr = tiltSteerRaw;
+    const tr = Math.max(-1, Math.min(1, tiltSteerRaw));
     // Smoothing adaptativo: cerca del centro más estable, en giro fuerte más responsivo.
     const gain = TILT_SMOOTH + Math.abs(tr) * 0.1;
     tiltFiltered += (tr - tiltFiltered) * Math.max(0.06, Math.min(0.32, gain));

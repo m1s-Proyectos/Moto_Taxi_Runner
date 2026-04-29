@@ -450,48 +450,48 @@ export class MotoGame {
     }
     this.ui.btnTilt.addEventListener(
       'click',
-      async () => {
+      () => {
         if (tiltSig.aborted) return;
         if (!isTiltSensorAvailable()) return;
         const wasOn = this.ui.btnTilt.getAttribute('aria-pressed') === 'true';
         if (!wasOn) {
-          // Estado intermedio "Detectando..." mientras se activa el permiso y arranca el sensor.
-          this.ui.btnTilt.textContent = 'Giro…';
-          this.ui.btnTilt.classList.add('mtr-tilt-on');
-          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
-          const granted = await requestTiltPermissionIfNeeded();
-          if (!granted) {
-            this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-            this.ui.btnTilt.classList.remove('mtr-tilt-on');
-            this.ui.btnTilt.textContent = 'Giro off';
-            return;
-          }
-          setTiltRecalibrationPending();
-          if (!setTiltInputOn(true)) {
-            this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-            this.ui.btnTilt.classList.remove('mtr-tilt-on');
-            this.ui.btnTilt.textContent = 'Giro n/a';
-            return;
-          }
-          this.ui.btnTilt.textContent = 'Giro on';
-          // Sensores tardan hasta ~2.5s en empezar a emitir tras conceder permiso (iOS y Android).
-          // Si tras 2.6s no llegó NINGUNA muestra real, marcamos n/a (evita "Giro on" sin señal).
-          window.setTimeout(() => {
+          // Primera línea efectiva del enable: permiso iOS dentro del mismo gesto (sin UI antes del prompt).
+          void requestTiltPermissionIfNeeded().then((granted) => {
             if (tiltSig.aborted) return;
-            if (this.ui.btnTilt.getAttribute('aria-pressed') !== 'true') return;
-            if (!hasTiltSignalSample()) {
-              setTiltInputOn(false);
+            if (!granted) {
+              this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+              this.ui.btnTilt.classList.remove('mtr-tilt-on');
+              this.ui.btnTilt.textContent = 'Giro off';
+              return;
+            }
+            this.ui.btnTilt.textContent = 'Giro…';
+            this.ui.btnTilt.classList.add('mtr-tilt-on');
+            this.ui.btnTilt.setAttribute('aria-pressed', 'true');
+            setTiltRecalibrationPending();
+            if (!setTiltInputOn(true)) {
               this.ui.btnTilt.setAttribute('aria-pressed', 'false');
               this.ui.btnTilt.classList.remove('mtr-tilt-on');
               this.ui.btnTilt.textContent = 'Giro n/a';
+              return;
             }
-          }, 2600);
-        } else {
-          setTiltInputOn(false);
-          this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-          this.ui.btnTilt.classList.remove('mtr-tilt-on');
-          this.ui.btnTilt.textContent = 'Giro off';
+            this.ui.btnTilt.textContent = 'Giro on';
+            window.setTimeout(() => {
+              if (tiltSig.aborted) return;
+              if (this.ui.btnTilt.getAttribute('aria-pressed') !== 'true') return;
+              if (!hasTiltSignalSample()) {
+                setTiltInputOn(false);
+                this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+                this.ui.btnTilt.classList.remove('mtr-tilt-on');
+                this.ui.btnTilt.textContent = 'Giro n/a';
+              }
+            }, 2600);
+          });
+          return;
         }
+        setTiltInputOn(false);
+        this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+        this.ui.btnTilt.classList.remove('mtr-tilt-on');
+        this.ui.btnTilt.textContent = 'Giro off';
       },
       { signal: tiltSig },
     );
@@ -1730,12 +1730,11 @@ export class MotoGame {
     const info = getTiltDebugInfo();
     const ms = info.msSinceLastEvent;
     const since = ms < 0 ? 'never' : `${ms.toFixed(0)}ms`;
-    const fmt = (v: number | null) => (v == null ? 'null' : v.toFixed(2));
     overlay.textContent = [
+      info.sensorActiveLabel,
       `tilt: ${info.on ? 'ON' : 'off'}  available:${info.available ? 'y' : 'n'}`,
-      `attached: do=${info.attached ? 'y' : 'n'} doa=${info.absoluteAttached ? 'y' : 'n'}`,
+      `attached: do=${info.relativeAttached ? 'y' : 'n'} doa=${info.absoluteAttached ? 'y' : 'n'}`,
       `events: ${info.eventCount}  src:${info.lastSrc ?? '-'}  last:${since}`,
-      `gamma: ${fmt(info.lastGamma)}  beta: ${fmt(info.lastBeta)}`,
       `raw: ${info.rawSteer.toFixed(3)}  filt: ${info.filteredSteer.toFixed(3)}`,
       `final steer: ${finalSteer.toFixed(3)}`,
     ].join('\n');
