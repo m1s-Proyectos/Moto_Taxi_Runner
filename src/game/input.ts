@@ -32,6 +32,7 @@ let tiltInputOn = false;
 /** Giro bruto -1..1 desde orientación (tras calibrar); el suavizado y dead zone se aplican en `pollInput`. */
 let tiltSteerRaw = 0;
 let tiltFiltered = 0;
+let tiltHasSample = false;
 let tiltRefG: number | null = null;
 let tiltRefB: number | null = null;
 let tiltCalAccG = 0;
@@ -47,15 +48,17 @@ const TILT_CAL_MAX_WAIT = 18;
 const TILT_SENSE_P = 0.05;
 const TILT_SENSE_L_G = 0.052;
 const TILT_SENSE_L_B = 0.045;
-const TILT_DEADZONE = 0.04;
-const TILT_SMOOTH = 0.12;
+const TILT_DEADZONE = 0.055;
+const TILT_SMOOTH = 0.16;
+const TILT_MAX_STEER = 0.92;
+const TILT_CURVE_EXP = 1.35;
+const TILT_MAX_DELTA_PER_SEC = 3.2;
+let tiltLastSampleAtMs = 0;
 
 const W_STEER_KEY = 1.0;
 const W_STEER_PAD = 1.0;
 const W_STEER_POINTER = 1.0;
 const W_STEER_MOUSE = 1.0;
-const W_STEER_TILT = 0.6;
-const W_STEER_TILT_WITH_POINTER = 0.25;
 /** Curva suave; más cercana a 1 = giro más directo (mejor con ratón en PC). */
 const STEER_NONLINEAR_EXP = 1.02;
 /** (nx-0.5) * escala → -1..1. */
@@ -241,6 +244,22 @@ function resetTiltCalibration(): void {
   orientationSteer = 0;
   tiltSteerRaw = 0;
   tiltFiltered = 0;
+  tiltHasSample = false;
+  tiltLastSampleAtMs = 0;
+}
+
+function applyDeadzoneNormalized(v: number, dz: number): number {
+  const a = Math.abs(v);
+  if (a <= dz) return 0;
+  const n = (a - dz) / Math.max(1e-5, 1 - dz);
+  return Math.sign(v) * Math.max(0, Math.min(1, n));
+}
+
+function shapeTiltSteer(v: number): number {
+  const z = applyDeadzoneNormalized(v, TILT_DEADZONE);
+  if (z === 0) return 0;
+  const a = Math.pow(Math.abs(z), TILT_CURVE_EXP);
+  return Math.sign(z) * Math.min(TILT_MAX_STEER, a * TILT_MAX_STEER);
 }
 
 /** Giro a partir de la diferencia respecto al pose «neutro» calibrada (no valores absolutos). */
@@ -308,6 +327,7 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   const b = e.beta;
   const g = e.gamma;
   if (b == null && g == null) return;
+  tiltHasSample = true;
 
   if (tiltRefG === null) {
     tryFinishTiltCalibration(b, g);
@@ -319,7 +339,16 @@ function updateTiltFromOrientation(e: DeviceOrientationEvent): void {
   const rG = tiltRefG ?? 0;
   const rB = tiltRefB ?? 90;
   orientationSteer = relativeSteerFromTilt(b, g, rG, rB);
-  tiltSteerRaw = Math.max(-1, Math.min(1, orientationSteer));
+  const shaped = shapeTiltSteer(Math.max(-1, Math.min(1, orientationSteer)));
+
+  // Filtro anti-picos para vibraciones/ruido del sensor.
+  const nowMs = performance.now();
+  const dt = tiltLastSampleAtMs > 0 ? Math.max(0.001, (nowMs - tiltLastSampleAtMs) / 1000) : 0.016;
+  tiltLastSampleAtMs = nowMs;
+  const maxDelta = TILT_MAX_DELTA_PER_SEC * dt;
+  const lo = tiltSteerRaw - maxDelta;
+  const hi = tiltSteerRaw + maxDelta;
+  tiltSteerRaw = Math.max(lo, Math.min(hi, shaped));
 }
 
 function ensureTiltListener(): void {
@@ -329,8 +358,21 @@ function ensureTiltListener(): void {
   tiltHandlerAttached = true;
 }
 
+export function isTiltSensorAvailable(): boolean {
+  return typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
+}
+
+export function hasTiltSignalSample(): boolean {
+  return tiltHasSample;
+}
+
 /** Activa giro por inclinación (solo giro, no acelerar). En iOS 13+ pedir permiso antes. */
-export function setTiltInputOn(on: boolean): void {
+export function setTiltInputOn(on: boolean): boolean {
+  if (on && !isTiltSensorAvailable()) {
+    tiltInputOn = false;
+    resetTiltCalibration();
+    return false;
+  }
   tiltInputOn = on;
   if (on) {
     ensureTiltListener();
@@ -338,6 +380,7 @@ export function setTiltInputOn(on: boolean): void {
   } else {
     resetTiltCalibration();
   }
+  return true;
 }
 
 export function setTiltRecalibrationPending(): void {
@@ -346,6 +389,9 @@ export function setTiltRecalibrationPending(): void {
 
 /** iOS 13+ Safari: solo hace falta el permiso de orientación para giro. */
 export async function requestTiltPermissionIfNeeded(): Promise<boolean> {
+  if (!isTiltSensorAvailable()) {
+    return false;
+  }
   const D = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<PermissionState> };
   if (typeof D.requestPermission === 'function') {
     const o = await D.requestPermission();
@@ -451,18 +497,22 @@ export function pollInput(): InputState {
   const aimG = useMouseAim && !padSteerActive && !pointerDriving ? aim : 0;
 
   if (tiltInputOn) {
-    let tr = tiltSteerRaw;
-    if (Math.abs(tr) < TILT_DEADZONE) tr = 0;
-    tiltFiltered += (tr - tiltFiltered) * TILT_SMOOTH;
+    const tr = tiltSteerRaw;
+    // Smoothing adaptativo: cerca del centro más estable, en giro fuerte más responsivo.
+    const gain = TILT_SMOOTH + Math.abs(tr) * 0.1;
+    tiltFiltered += (tr - tiltFiltered) * Math.max(0.06, Math.min(0.32, gain));
   } else {
     tiltFiltered = 0;
   }
 
-  const tiltWeight = pointerDriving && !padSteerActive ? W_STEER_TILT_WITH_POINTER : W_STEER_TILT;
-  const tForBlend = tiltInputOn && !padSteerActive ? tiltFiltered : 0;
+  const tForBlend = tiltInputOn ? tiltFiltered : 0;
 
   let steerWeightedUnclamped = 0;
-  if (padSteerActive) {
+  if (tiltInputOn) {
+    // Modo "Steering ON": volante principal = inclinación del dispositivo.
+    // Mantiene aceleración en botones/teclas/click, pero el giro viene del tilt.
+    steerWeightedUnclamped = tForBlend;
+  } else if (padSteerActive) {
     steerWeightedUnclamped = pSteer * W_STEER_PAD;
   } else if (pointerDriving) {
     steerWeightedUnclamped = ptr * W_STEER_POINTER;
@@ -472,7 +522,6 @@ export function pollInput(): InputState {
   } else {
     steerWeightedUnclamped = aimG * W_STEER_MOUSE;
   }
-  steerWeightedUnclamped += tForBlend * tiltWeight;
   const steerWeighted = Math.max(-1, Math.min(1, steerWeightedUnclamped));
 
   const pureMouseSteer =

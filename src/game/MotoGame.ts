@@ -61,6 +61,8 @@ import {
   attachPointerDriver,
   attachTouchPad,
   disposeTiltListener,
+  hasTiltSignalSample,
+  isTiltSensorAvailable,
   isMouseAimInputActive,
   pollInput,
   requestTiltPermissionIfNeeded,
@@ -435,18 +437,38 @@ export class MotoGame {
     this.detachPointerDriver = attachPointerDriver(this.renderer.domElement);
 
     const tiltSig = this.tiltInputAbort.signal;
+    if (!isTiltSensorAvailable()) {
+      this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+      this.ui.btnTilt.classList.remove('mtr-tilt-on');
+      this.ui.btnTilt.textContent = 'Giro n/a';
+      this.ui.btnTilt.disabled = true;
+    } else {
+      this.ui.btnTilt.disabled = false;
+    }
     this.ui.btnTilt.addEventListener(
       'click',
       async () => {
         if (tiltSig.aborted) return;
+        if (!isTiltSensorAvailable()) return;
         const wasOn = this.ui.btnTilt.getAttribute('aria-pressed') === 'true';
         if (!wasOn) {
           if (!(await requestTiltPermissionIfNeeded())) return;
           setTiltRecalibrationPending();
-          setTiltInputOn(true);
+          if (!setTiltInputOn(true)) return;
           this.ui.btnTilt.setAttribute('aria-pressed', 'true');
           this.ui.btnTilt.classList.add('mtr-tilt-on');
           this.ui.btnTilt.textContent = 'Giro on';
+          // Fallback UX: si no llega señal real del sensor, volver a OFF para evitar giro muerto.
+          window.setTimeout(() => {
+            if (tiltSig.aborted) return;
+            if (this.ui.btnTilt.getAttribute('aria-pressed') !== 'true') return;
+            if (!hasTiltSignalSample()) {
+              setTiltInputOn(false);
+              this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+              this.ui.btnTilt.classList.remove('mtr-tilt-on');
+              this.ui.btnTilt.textContent = 'Giro n/a';
+            }
+          }, 1200);
         } else {
           setTiltInputOn(false);
           this.ui.btnTilt.setAttribute('aria-pressed', 'false');
@@ -525,6 +547,10 @@ export class MotoGame {
     this.ui.menuOverlay.classList.add('hidden');
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
+    if (this.ui.btnTilt.getAttribute('aria-pressed') === 'true') {
+      // Neutral calibration al iniciar carrera (pose actual del teléfono = recto).
+      setTiltRecalibrationPending();
+    }
     this.renderer.domElement.focus({ preventScroll: true });
   }
 
