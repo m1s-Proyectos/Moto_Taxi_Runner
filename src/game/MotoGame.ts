@@ -61,6 +61,7 @@ import {
   attachPointerDriver,
   attachTouchPad,
   disposeTiltListener,
+  getTiltDebugInfo,
   hasTiltSignalSample,
   isTiltSensorAvailable,
   isMouseAimInputActive,
@@ -264,6 +265,8 @@ export class MotoGame {
   private detachMouseAim: (() => void) | null = null;
   private detachPointerDriver: (() => void) | null = null;
   private tiltInputAbort: AbortController | null = null;
+  private tiltDebugOverlay: HTMLDivElement | null = null;
+  private tiltDebugAccumMs = 0;
   private resizeObserver: ResizeObserver | null = null;
   private raf = 0;
   private nightSky: NightSky | null = null;
@@ -452,13 +455,27 @@ export class MotoGame {
         if (!isTiltSensorAvailable()) return;
         const wasOn = this.ui.btnTilt.getAttribute('aria-pressed') === 'true';
         if (!wasOn) {
-          if (!(await requestTiltPermissionIfNeeded())) return;
-          setTiltRecalibrationPending();
-          if (!setTiltInputOn(true)) return;
-          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
+          // Estado intermedio "Detectando..." mientras se activa el permiso y arranca el sensor.
+          this.ui.btnTilt.textContent = 'Giro…';
           this.ui.btnTilt.classList.add('mtr-tilt-on');
+          this.ui.btnTilt.setAttribute('aria-pressed', 'true');
+          const granted = await requestTiltPermissionIfNeeded();
+          if (!granted) {
+            this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+            this.ui.btnTilt.classList.remove('mtr-tilt-on');
+            this.ui.btnTilt.textContent = 'Giro off';
+            return;
+          }
+          setTiltRecalibrationPending();
+          if (!setTiltInputOn(true)) {
+            this.ui.btnTilt.setAttribute('aria-pressed', 'false');
+            this.ui.btnTilt.classList.remove('mtr-tilt-on');
+            this.ui.btnTilt.textContent = 'Giro n/a';
+            return;
+          }
           this.ui.btnTilt.textContent = 'Giro on';
-          // Fallback UX: si no llega señal real del sensor, volver a OFF para evitar giro muerto.
+          // Sensores tardan hasta ~2.5s en empezar a emitir tras conceder permiso (iOS y Android).
+          // Si tras 2.6s no llegó NINGUNA muestra real, marcamos n/a (evita "Giro on" sin señal).
           window.setTimeout(() => {
             if (tiltSig.aborted) return;
             if (this.ui.btnTilt.getAttribute('aria-pressed') !== 'true') return;
@@ -468,7 +485,7 @@ export class MotoGame {
               this.ui.btnTilt.classList.remove('mtr-tilt-on');
               this.ui.btnTilt.textContent = 'Giro n/a';
             }
-          }, 1200);
+          }, 2600);
         } else {
           setTiltInputOn(false);
           this.ui.btnTilt.setAttribute('aria-pressed', 'false');
@@ -488,6 +505,10 @@ export class MotoGame {
       },
       { signal: tiltSig },
     );
+
+    if (this.shouldShowTiltDebug()) {
+      this.mountTiltDebugOverlay();
+    }
     this.renderer.domElement.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
@@ -519,6 +540,7 @@ export class MotoGame {
     this.tiltInputAbort?.abort();
     this.tiltInputAbort = null;
     disposeTiltListener();
+    this.removeTiltDebugOverlay();
     this.ui.btnTilt.setAttribute('aria-pressed', 'false');
     this.ui.btnTilt.classList.remove('mtr-tilt-on');
     this.ui.btnTilt.textContent = 'Giro off';
@@ -1659,5 +1681,70 @@ export class MotoGame {
     this.nightSky?.update(this.camera);
     tickCityShaders(tSec);
     this.renderer.render(this.scene, this.camera);
+
+    if (this.tiltDebugOverlay) {
+      this.tiltDebugAccumMs += dt * 1000;
+      if (this.tiltDebugAccumMs >= 100) {
+        this.tiltDebugAccumMs = 0;
+        this.refreshTiltDebugOverlay(input.steer);
+      }
+    }
+  }
+
+  private shouldShowTiltDebug(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URLSearchParams(window.location.search).has('tiltdebug');
+    } catch {
+      return false;
+    }
+  }
+
+  private mountTiltDebugOverlay(): void {
+    if (this.tiltDebugOverlay || typeof document === 'undefined') return;
+    const el = document.createElement('div');
+    el.style.cssText = [
+      'position:fixed',
+      'top:8px',
+      'right:8px',
+      'z-index:9999',
+      'background:rgba(2,6,23,0.85)',
+      'color:#a5f3fc',
+      'font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
+      'padding:8px 10px',
+      'border:1px solid rgba(34,211,238,0.4)',
+      'border-radius:8px',
+      'pointer-events:none',
+      'white-space:pre',
+      'min-width:200px',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+    ].join(';');
+    el.textContent = 'tilt debug…';
+    document.body.appendChild(el);
+    this.tiltDebugOverlay = el;
+  }
+
+  private refreshTiltDebugOverlay(finalSteer: number): void {
+    const overlay = this.tiltDebugOverlay;
+    if (!overlay) return;
+    const info = getTiltDebugInfo();
+    const ms = info.msSinceLastEvent;
+    const since = ms < 0 ? 'never' : `${ms.toFixed(0)}ms`;
+    const fmt = (v: number | null) => (v == null ? 'null' : v.toFixed(2));
+    overlay.textContent = [
+      `tilt: ${info.on ? 'ON' : 'off'}  available:${info.available ? 'y' : 'n'}`,
+      `attached: do=${info.attached ? 'y' : 'n'} doa=${info.absoluteAttached ? 'y' : 'n'}`,
+      `events: ${info.eventCount}  src:${info.lastSrc ?? '-'}  last:${since}`,
+      `gamma: ${fmt(info.lastGamma)}  beta: ${fmt(info.lastBeta)}`,
+      `raw: ${info.rawSteer.toFixed(3)}  filt: ${info.filteredSteer.toFixed(3)}`,
+      `final steer: ${finalSteer.toFixed(3)}`,
+    ].join('\n');
+  }
+
+  private removeTiltDebugOverlay(): void {
+    if (this.tiltDebugOverlay) {
+      this.tiltDebugOverlay.remove();
+      this.tiltDebugOverlay = null;
+    }
   }
 }
