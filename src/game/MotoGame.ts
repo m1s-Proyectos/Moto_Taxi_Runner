@@ -62,16 +62,10 @@ import {
   attachKeyboard,
   attachMouseAim,
   attachPointerDriver,
-  attachTouchPad,
-  disposeTiltListener,
-  getTiltDebugInfo,
-  hasTiltSignalSample,
-  isTiltSensorAvailable,
+  attachThrottleBrake,
+  attachDragSteer,
   isMouseAimInputActive,
   pollInput,
-  requestTiltPermissionIfNeeded,
-  setTiltInputOn,
-  setTiltRecalibrationPending,
 } from './input';
 import { addZebraCrossingOnRoad } from './pedestrians';
 import { createParkedCar } from './parkedCar';
@@ -263,9 +257,7 @@ export class MotoGame {
   private detachTouchPad: (() => void) | null = null;
   private detachMouseAim: (() => void) | null = null;
   private detachPointerDriver: (() => void) | null = null;
-  private tiltInputAbort: AbortController | null = null;
-  private tiltDebugOverlay: HTMLDivElement | null = null;
-  private tiltDebugAccumMs = 0;
+  private detachDragSteer: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private raf = 0;
   private nightSky: NightSky | null = null;
@@ -427,88 +419,15 @@ export class MotoGame {
     this.detachTouchPad?.();
     this.detachMouseAim?.();
     this.detachPointerDriver?.();
-    this.tiltInputAbort?.abort();
-    this.tiltInputAbort = new AbortController();
     this.detachKeyboard = attachKeyboard();
-    this.detachTouchPad = attachTouchPad({
+    this.detachTouchPad = attachThrottleBrake({
       forward: this.ui.btnTouchForward,
-      left: this.ui.btnTouchLeft,
-      right: this.ui.btnTouchRight,
       brake: this.ui.btnTouchBrake,
     });
+    this.detachDragSteer = attachDragSteer(this.ui.dragSteerZone);
     this.detachMouseAim = attachMouseAim(this.renderer.domElement);
     this.detachPointerDriver = attachPointerDriver(this.renderer.domElement);
 
-    const tiltSig = this.tiltInputAbort.signal;
-    if (!isTiltSensorAvailable()) {
-      this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-      this.ui.btnTilt.classList.remove('mtr-tilt-on');
-      this.ui.btnTilt.textContent = 'Giro n/a';
-      this.ui.btnTilt.disabled = true;
-    } else {
-      this.ui.btnTilt.disabled = false;
-    }
-    this.ui.btnTilt.addEventListener(
-      'click',
-      () => {
-        if (tiltSig.aborted) return;
-        if (!isTiltSensorAvailable()) return;
-        const wasOn = this.ui.btnTilt.getAttribute('aria-pressed') === 'true';
-        if (!wasOn) {
-          // Primera línea efectiva del enable: permiso iOS dentro del mismo gesto (sin UI antes del prompt).
-          void requestTiltPermissionIfNeeded().then((granted) => {
-            if (tiltSig.aborted) return;
-            if (!granted) {
-              this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-              this.ui.btnTilt.classList.remove('mtr-tilt-on');
-              this.ui.btnTilt.textContent = 'Giro off';
-              return;
-            }
-            this.ui.btnTilt.textContent = 'Giro…';
-            this.ui.btnTilt.classList.add('mtr-tilt-on');
-            this.ui.btnTilt.setAttribute('aria-pressed', 'true');
-            setTiltRecalibrationPending();
-            if (!setTiltInputOn(true)) {
-              this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-              this.ui.btnTilt.classList.remove('mtr-tilt-on');
-              this.ui.btnTilt.textContent = 'Giro n/a';
-              return;
-            }
-            this.ui.btnTilt.textContent = 'Giro on';
-            window.setTimeout(() => {
-              if (tiltSig.aborted) return;
-              if (this.ui.btnTilt.getAttribute('aria-pressed') !== 'true') return;
-              if (!hasTiltSignalSample()) {
-                setTiltInputOn(false);
-                this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-                this.ui.btnTilt.classList.remove('mtr-tilt-on');
-                this.ui.btnTilt.textContent = 'Giro n/a';
-              }
-            }, 2600);
-          });
-          return;
-        }
-        setTiltInputOn(false);
-        this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-        this.ui.btnTilt.classList.remove('mtr-tilt-on');
-        this.ui.btnTilt.textContent = 'Giro off';
-      },
-      { signal: tiltSig },
-    );
-    this.ui.btnTilt.addEventListener(
-      'dblclick',
-      (e) => {
-        e.preventDefault();
-        if (this.ui.btnTilt.getAttribute('aria-pressed') === 'true') {
-          setTiltRecalibrationPending();
-        }
-      },
-      { signal: tiltSig },
-    );
-
-    if (this.shouldShowTiltDebug()) {
-      this.mountTiltDebugOverlay();
-    }
     this.renderer.domElement.focus({ preventScroll: true });
 
     const onKey = (e: KeyboardEvent) => {
@@ -550,13 +469,8 @@ export class MotoGame {
     this.resizeObserver = null;
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('orientationchange', this.onOrientation);
-    this.tiltInputAbort?.abort();
-    this.tiltInputAbort = null;
-    disposeTiltListener();
-    this.removeTiltDebugOverlay();
-    this.ui.btnTilt.setAttribute('aria-pressed', 'false');
-    this.ui.btnTilt.classList.remove('mtr-tilt-on');
-    this.ui.btnTilt.textContent = 'Giro off';
+    this.detachDragSteer?.();
+    this.detachDragSteer = null;
     this.detachPointerDriver?.();
     this.detachPointerDriver = null;
     this.detachMouseAim?.();
@@ -582,10 +496,6 @@ export class MotoGame {
     this.ui.menuOverlay.classList.add('hidden');
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
-    if (this.ui.btnTilt.getAttribute('aria-pressed') === 'true') {
-      // Neutral calibration al iniciar carrera (pose actual del teléfono = recto).
-      setTiltRecalibrationPending();
-    }
     this.renderer.domElement.focus({ preventScroll: true });
 
     if (this.mpCtx) {
@@ -1715,68 +1625,5 @@ export class MotoGame {
     tickCityShaders(tSec);
     this.renderer.render(this.scene, this.camera);
 
-    if (this.tiltDebugOverlay) {
-      this.tiltDebugAccumMs += dt * 1000;
-      if (this.tiltDebugAccumMs >= 100) {
-        this.tiltDebugAccumMs = 0;
-        this.refreshTiltDebugOverlay(input.steer);
-      }
-    }
-  }
-
-  private shouldShowTiltDebug(): boolean {
-    if (typeof window === 'undefined') return false;
-    try {
-      return new URLSearchParams(window.location.search).has('tiltdebug');
-    } catch {
-      return false;
-    }
-  }
-
-  private mountTiltDebugOverlay(): void {
-    if (this.tiltDebugOverlay || typeof document === 'undefined') return;
-    const el = document.createElement('div');
-    el.style.cssText = [
-      'position:fixed',
-      'top:8px',
-      'right:8px',
-      'z-index:9999',
-      'background:rgba(2,6,23,0.85)',
-      'color:#a5f3fc',
-      'font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
-      'padding:8px 10px',
-      'border:1px solid rgba(34,211,238,0.4)',
-      'border-radius:8px',
-      'pointer-events:none',
-      'white-space:pre',
-      'min-width:200px',
-      'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
-    ].join(';');
-    el.textContent = 'tilt debug…';
-    document.body.appendChild(el);
-    this.tiltDebugOverlay = el;
-  }
-
-  private refreshTiltDebugOverlay(finalSteer: number): void {
-    const overlay = this.tiltDebugOverlay;
-    if (!overlay) return;
-    const info = getTiltDebugInfo();
-    const ms = info.msSinceLastEvent;
-    const since = ms < 0 ? 'never' : `${ms.toFixed(0)}ms`;
-    overlay.textContent = [
-      info.sensorActiveLabel,
-      `tilt: ${info.on ? 'ON' : 'off'}  available:${info.available ? 'y' : 'n'}`,
-      `attached: do=${info.relativeAttached ? 'y' : 'n'} doa=${info.absoluteAttached ? 'y' : 'n'}`,
-      `events: ${info.eventCount}  src:${info.lastSrc ?? '-'}  last:${since}`,
-      `raw: ${info.rawSteer.toFixed(3)}  filt: ${info.filteredSteer.toFixed(3)}`,
-      `final steer: ${finalSteer.toFixed(3)}`,
-    ].join('\n');
-  }
-
-  private removeTiltDebugOverlay(): void {
-    if (this.tiltDebugOverlay) {
-      this.tiltDebugOverlay.remove();
-      this.tiltDebugOverlay = null;
-    }
   }
 }
