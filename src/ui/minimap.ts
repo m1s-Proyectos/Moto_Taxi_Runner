@@ -16,11 +16,12 @@ function getMinimapCssSize(): { w: number; h: number } {
   }
   const iw = window.innerWidth;
   let w: number;
-  if (iw < 360) w = 72;
-  else if (iw < 400) w = 78;
-  else if (iw < 480) w = 90;
-  else if (iw < 640) w = 118;
-  else if (iw < 900) w = 148;
+  if (iw < 340) w = 60;
+  else if (iw < 380) w = 66;
+  else if (iw < 420) w = 74;
+  else if (iw < 480) w = 82;
+  else if (iw < 640) w = 102;
+  else if (iw < 900) w = 132;
   else w = BASE_W;
   const h = Math.round(w * (BASE_H / BASE_W));
   return { w, h };

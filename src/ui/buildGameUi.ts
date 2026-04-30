@@ -68,6 +68,8 @@ export type GameUiRefs = {
   timeAttackBarFill: HTMLElement;
   btnAgain: HTMLButtonElement;
   btnFinishClose: HTMLButtonElement;
+  /** Resultado de carrera: vuelve al menú / splash (misma acción que «Volver a inicio» del lobby). */
+  btnFinishBackHome: HTMLButtonElement;
   btnBackHome: HTMLButtonElement;
   passengerHud: HTMLElement;
   passengerLabel: HTMLElement;
@@ -335,7 +337,7 @@ export function buildGameUi(
   btnTouchForward.dataset.role = 'touch-forward';
   btnTouchForward.setAttribute('aria-label', 'Acelerar (gas)');
   btnTouchForward.className =
-    'mtr-touch-btn mtr-touch-throttle pointer-events-auto flex h-[4.35rem] w-[4.1rem] min-h-[4rem] min-w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-amber-400/45 bg-gradient-to-b from-zinc-800/55 to-zinc-950/65 text-amber-100 shadow-lg shadow-black/25 backdrop-blur-md transition-transform active:scale-[0.98] sm:border-2 sm:border-amber-400/55 sm:from-zinc-800/85 sm:to-zinc-900/90 sm:h-[4.5rem] sm:min-h-[4.4rem] sm:w-[4.25rem] sm:min-w-[4rem]';
+    'mtr-touch-btn mtr-touch-throttle pointer-events-auto flex h-[4.35rem] w-[4.1rem] min-h-[4rem] min-w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-amber-400/40 bg-gradient-to-b from-zinc-800/38 to-zinc-950/48 text-amber-100 shadow-md shadow-black/15 backdrop-blur-md transition-transform active:scale-[0.98] sm:border-2 sm:border-amber-400/55 sm:from-zinc-800/80 sm:to-zinc-900/88 sm:shadow-lg sm:h-[4.5rem] sm:min-h-[4.4rem] sm:w-[4.25rem] sm:min-w-[4rem]';
   btnTouchForward.innerHTML = iconTouchAccel;
 
   // ── Brake button ──
@@ -344,7 +346,7 @@ export function buildGameUi(
   btnTouchBrake.dataset.role = 'touch-brake';
   btnTouchBrake.setAttribute('aria-label', 'Frenar');
   btnTouchBrake.className =
-    'mtr-touch-btn mtr-touch-brake pointer-events-auto flex h-14 w-[4.1rem] min-h-[3.4rem] touch-manipulation select-none items-center justify-center rounded-2xl border border-rose-500/40 bg-zinc-950/55 text-rose-100 shadow-md shadow-black/25 backdrop-blur-md transition-transform active:scale-[0.97] sm:border-2 sm:border-rose-500/50 sm:bg-zinc-900/88 sm:h-[3.75rem] sm:w-[4.25rem]';
+    'mtr-touch-btn mtr-touch-brake pointer-events-auto flex h-14 w-[4.1rem] min-h-[3.4rem] touch-manipulation select-none items-center justify-center rounded-2xl border border-rose-500/35 bg-zinc-950/42 text-rose-100 shadow-md shadow-black/15 backdrop-blur-md transition-transform active:scale-[0.97] sm:border-2 sm:border-rose-500/50 sm:bg-zinc-900/85 sm:h-[3.75rem] sm:w-[4.25rem]';
   btnTouchBrake.innerHTML = iconTouchBrake;
 
   // ── Drag-steer zone (right half, fills available space) ──
@@ -352,16 +354,16 @@ export function buildGameUi(
   dragSteerZone.dataset.role = 'drag-steer-zone';
   dragSteerZone.setAttribute('aria-label', 'Zona de giro: desliza horizontalmente para girar');
   dragSteerZone.setAttribute('role', 'slider');
+  /* Background/border: see style.css — light frosted glass ~15–22% opacity (never dark slate fill). */
   dragSteerZone.className =
-    'mtr-drag-steer pointer-events-auto flex flex-1 touch-manipulation select-none flex-col items-center justify-center self-stretch rounded-2xl border border-white/12 bg-zinc-950/10 shadow-inner shadow-black/20 backdrop-blur-[2px] sm:bg-zinc-950/18 sm:backdrop-blur-sm';
-  // High-contrast arrows + readable label over a nearly invisible panel
+    'mtr-drag-steer pointer-events-auto flex flex-1 touch-manipulation select-none flex-col items-center justify-center self-stretch rounded-2xl';
   dragSteerZone.innerHTML = `
-    <div class="mtr-drag-steer-visual pointer-events-none flex flex-col items-center justify-center gap-1 px-1" aria-hidden="true">
-      <svg class="mtr-drag-steer-arrows h-6 w-[3.25rem] text-zinc-100 sm:h-7 sm:w-14" viewBox="0 0 56 28" fill="none" aria-hidden="true">
-        <path stroke="rgba(0,0,0,0.55)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
-        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
+    <div class="mtr-drag-steer-visual pointer-events-none flex flex-col items-center justify-center gap-1.5 px-1" aria-hidden="true">
+      <svg class="mtr-drag-steer-arrows h-7 w-[3.5rem] shrink-0 sm:h-7 sm:w-14" viewBox="0 0 56 28" fill="none" aria-hidden="true">
+        <path stroke="rgba(0,0,0,0.62)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
+        <path stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
       </svg>
-      <span class="rounded-full border border-white/20 bg-zinc-950/72 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-zinc-50 shadow-[0_1px_6px_rgba(0,0,0,0.65)] backdrop-blur-md sm:text-[9px]">Giro</span>
+      <span class="mtr-drag-steer-label rounded-full border border-white/35 bg-black/55 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-sm sm:text-[10px]">Giro</span>
     </div>`;
 
   // ── Row: left column (brake + gas) | right zone (drag steer) ──
@@ -392,7 +394,7 @@ export function buildGameUi(
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
   touchPad.className =
-    'mtr-touch-pad mtr-show-touch-only pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/72 via-zinc-950/28 to-transparent pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 sm:from-zinc-950/88 sm:via-zinc-950/45 sm:pb-[max(0.4rem,env(safe-area-inset-bottom))] sm:pt-2';
+    'mtr-touch-pad mtr-show-touch-only pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/48 via-zinc-950/14 to-transparent pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 sm:from-zinc-950/72 sm:via-zinc-950/28 sm:pb-[max(0.4rem,env(safe-area-inset-bottom))] sm:pt-2';
   touchPad.setAttribute('role', 'group');
   touchPad.setAttribute('aria-label', 'Control de conducción');
   touchPad.append(touchRow, touchDetails);
@@ -554,9 +556,14 @@ export function buildGameUi(
       <p data-role="finish-time" class="mt-3 font-mono text-lg text-amber-400/95">Tiempo: 0:00.00</p>
       <p data-role="finish-cloud" class="mt-2 hidden min-h-[1.25rem] text-xs text-zinc-500" aria-live="polite"></p>
       <p class="mt-2 text-sm leading-relaxed text-zinc-400">Desempate (si aplica): menor tiempo en el último tramo (casa de mamá), luego el anterior.</p>
-      <div class="mt-6 flex flex-wrap gap-3">
-        <button type="button" data-role="again" class="rounded-xl bg-zinc-100 px-4 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-white">Otra carrera</button>
-        <button type="button" data-role="finish-close" class="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800">Seguir</button>
+      <div class="mt-6 flex flex-col gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <button type="button" data-role="again" class="min-h-[48px] flex-1 rounded-xl bg-zinc-100 px-4 py-3 text-center text-sm font-semibold text-zinc-950 shadow-sm hover:bg-white active:scale-[0.99] sm:min-h-0 sm:py-2.5">Otra carrera</button>
+          <button type="button" data-role="finish-close" class="min-h-[48px] flex-1 rounded-xl border border-zinc-600 bg-zinc-800/50 px-4 py-3 text-center text-sm font-medium text-zinc-100 hover:bg-zinc-800 active:scale-[0.99] sm:min-h-0 sm:py-2.5">Seguir</button>
+        </div>
+        <button type="button" data-role="finish-back-home" class="min-h-[52px] w-full rounded-xl border-2 border-amber-500/45 bg-amber-500/12 px-4 py-3.5 text-center text-sm font-bold tracking-wide text-amber-100 shadow-[0_0_24px_-8px_rgba(245,158,11,0.45)] transition hover:bg-amber-500/18 active:scale-[0.99]">
+          Back to Home
+        </button>
       </div>
     </div>
   `;
@@ -591,12 +598,15 @@ export function buildGameUi(
   const finishCloud = q(finishOverlay, '[data-role="finish-cloud"]');
   const btnAgain = q(finishOverlay, '[data-role="again"]') as HTMLButtonElement;
   const btnFinishClose = q(finishOverlay, '[data-role="finish-close"]') as HTMLButtonElement;
+  const btnFinishBackHome = q(finishOverlay, '[data-role="finish-back-home"]') as HTMLButtonElement;
   const btnBackHome = q(menuOverlay, '[data-role="back-home"]') as HTMLButtonElement;
   const backHomeRow = q(menuOverlay, '[data-role="back-home-row"]') as HTMLElement;
   if (handlers.onBackToHome) {
     btnBackHome.addEventListener('click', () => handlers.onBackToHome!());
+    btnFinishBackHome.addEventListener('click', () => handlers.onBackToHome!());
   } else {
     backHomeRow.classList.add('hidden');
+    btnFinishBackHome.classList.add('hidden');
   }
 
   let mpUnsub: (() => void) | null = null;
@@ -935,6 +945,7 @@ export function buildGameUi(
     timeAttackBarFill,
     btnAgain,
     btnFinishClose,
+    btnFinishBackHome,
     btnBackHome,
     passengerHud,
     passengerLabel,
