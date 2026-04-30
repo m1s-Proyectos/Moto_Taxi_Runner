@@ -228,6 +228,31 @@ html[data-mtr-ui='desktop'] .mtr-hud-passenger {
   bottom: 7rem;
 }
 
+/*
+ * Minimap: corner HUD — desktop keeps breathing room below OS/chrome;
+ * touch pulls tight to the top-right safe area so it stays away from the bottom steer strip.
+ */
+.mtr-minimap-wrap {
+  right: max(0.75rem, env(safe-area-inset-right));
+  top: max(4rem, calc(env(safe-area-inset-top) + 0.35rem));
+  align-items: flex-end;
+}
+
+html[data-mtr-ui='touch'] .mtr-minimap-wrap {
+  right: max(0.35rem, env(safe-area-inset-right));
+  top: max(0.35rem, env(safe-area-inset-top));
+}
+
+html[data-mtr-ui='touch'] .mtr-minimap-canvas {
+  opacity: 0.94;
+}
+
+/* Steering strip: nearly invisible panel; arrows stay vivid via markup */
+html[data-mtr-ui='touch'] .mtr-drag-steer:active {
+  border-color: rgba(255, 255, 255, 0.26);
+  background-color: rgba(24, 24, 27, 0.24);
+}
+
 /* Mando táctil: solo interactivo cuando el HUD de carrera está visible */
 .mtr-hud-on .mtr-touch-pad {
   pointer-events: auto;

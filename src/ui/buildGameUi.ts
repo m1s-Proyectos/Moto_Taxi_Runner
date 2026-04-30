@@ -234,15 +234,15 @@ export function buildGameUi(
 
   const mapWrap = document.createElement('div');
   mapWrap.className =
-    'pointer-events-none fixed right-[max(0.5rem,env(safe-area-inset-right))] top-16 z-10 flex flex-col items-end gap-0.5 sm:right-3 sm:top-20 sm:gap-1 md:right-6 md:top-24';
+    'mtr-minimap-wrap pointer-events-none fixed z-10 flex flex-col gap-0.5';
   const mapLbl = document.createElement('span');
   mapLbl.className =
-    'text-[8px] font-medium uppercase tracking-widest text-zinc-500 sm:text-[9px] md:text-[10px]';
+    'mtr-minimap-label text-[7px] font-semibold uppercase tracking-widest text-zinc-400 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] sm:text-[8px] md:text-[10px]';
   mapLbl.textContent = 'Recorrido';
   const mapCanvas = document.createElement('canvas');
   mapCanvas.dataset.role = 'minimap';
   mapCanvas.className =
-    'rounded-lg border border-zinc-800/90 bg-zinc-950/85 shadow-md shadow-black/35 backdrop-blur-sm sm:rounded-xl sm:shadow-lg sm:shadow-black/40';
+    'mtr-minimap-canvas rounded-md border border-zinc-700/70 bg-zinc-950/80 shadow-md shadow-black/40 backdrop-blur-[3px] sm:rounded-lg sm:border-zinc-800/90 sm:bg-zinc-950/85 sm:backdrop-blur-sm md:rounded-xl md:shadow-lg';
   mapWrap.append(mapLbl, mapCanvas);
 
   const hudRoot = document.createElement('div');
@@ -335,7 +335,7 @@ export function buildGameUi(
   btnTouchForward.dataset.role = 'touch-forward';
   btnTouchForward.setAttribute('aria-label', 'Acelerar (gas)');
   btnTouchForward.className =
-    'mtr-touch-btn mtr-touch-throttle pointer-events-auto flex h-[4.35rem] w-[4.1rem] min-h-[4rem] min-w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-amber-400/55 bg-gradient-to-b from-zinc-800/95 to-zinc-900/95 text-amber-100 shadow-lg shadow-amber-950/30 transition-transform active:scale-[0.98] sm:h-[4.5rem] sm:min-h-[4.4rem] sm:w-[4.25rem] sm:min-w-[4rem]';
+    'mtr-touch-btn mtr-touch-throttle pointer-events-auto flex h-[4.35rem] w-[4.1rem] min-h-[4rem] min-w-[3.9rem] shrink-0 touch-manipulation select-none items-center justify-center rounded-2xl border border-amber-400/45 bg-gradient-to-b from-zinc-800/55 to-zinc-950/65 text-amber-100 shadow-lg shadow-black/25 backdrop-blur-md transition-transform active:scale-[0.98] sm:border-2 sm:border-amber-400/55 sm:from-zinc-800/85 sm:to-zinc-900/90 sm:h-[4.5rem] sm:min-h-[4.4rem] sm:w-[4.25rem] sm:min-w-[4rem]';
   btnTouchForward.innerHTML = iconTouchAccel;
 
   // ── Brake button ──
@@ -344,7 +344,7 @@ export function buildGameUi(
   btnTouchBrake.dataset.role = 'touch-brake';
   btnTouchBrake.setAttribute('aria-label', 'Frenar');
   btnTouchBrake.className =
-    'mtr-touch-btn mtr-touch-brake pointer-events-auto flex h-14 w-[4.1rem] min-h-[3.4rem] touch-manipulation select-none items-center justify-center rounded-2xl border-2 border-rose-500/50 bg-zinc-900/95 text-rose-200 shadow-md shadow-rose-950/25 transition-transform active:scale-[0.97] sm:h-[3.75rem] sm:w-[4.25rem]';
+    'mtr-touch-btn mtr-touch-brake pointer-events-auto flex h-14 w-[4.1rem] min-h-[3.4rem] touch-manipulation select-none items-center justify-center rounded-2xl border border-rose-500/40 bg-zinc-950/55 text-rose-100 shadow-md shadow-black/25 backdrop-blur-md transition-transform active:scale-[0.97] sm:border-2 sm:border-rose-500/50 sm:bg-zinc-900/88 sm:h-[3.75rem] sm:w-[4.25rem]';
   btnTouchBrake.innerHTML = iconTouchBrake;
 
   // ── Drag-steer zone (right half, fills available space) ──
@@ -353,20 +353,21 @@ export function buildGameUi(
   dragSteerZone.setAttribute('aria-label', 'Zona de giro: desliza horizontalmente para girar');
   dragSteerZone.setAttribute('role', 'slider');
   dragSteerZone.className =
-    'mtr-drag-steer pointer-events-auto flex flex-1 touch-manipulation select-none flex-col items-center justify-center self-stretch rounded-2xl border border-zinc-700/40 bg-zinc-900/30';
-  // Visual hint: two horizontal arrows + label
+    'mtr-drag-steer pointer-events-auto flex flex-1 touch-manipulation select-none flex-col items-center justify-center self-stretch rounded-2xl border border-white/12 bg-zinc-950/10 shadow-inner shadow-black/20 backdrop-blur-[2px] sm:bg-zinc-950/18 sm:backdrop-blur-sm';
+  // High-contrast arrows + readable label over a nearly invisible panel
   dragSteerZone.innerHTML = `
-    <div class="flex flex-col items-center gap-1 opacity-40 pointer-events-none" aria-hidden="true">
-      <svg class="h-7 w-14" viewBox="0 0 56 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
+    <div class="mtr-drag-steer-visual pointer-events-none flex flex-col items-center justify-center gap-1 px-1" aria-hidden="true">
+      <svg class="mtr-drag-steer-arrows h-6 w-[3.25rem] text-zinc-100 sm:h-7 sm:w-14" viewBox="0 0 56 28" fill="none" aria-hidden="true">
+        <path stroke="rgba(0,0,0,0.55)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
+        <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 14h48M4 14l8-7M4 14l8 7M52 14l-8-7M52 14l-8 7"/>
       </svg>
-      <span class="text-[8px] font-bold uppercase tracking-widest text-zinc-400">Giro</span>
+      <span class="rounded-full border border-white/20 bg-zinc-950/72 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-zinc-50 shadow-[0_1px_6px_rgba(0,0,0,0.65)] backdrop-blur-md sm:text-[9px]">Giro</span>
     </div>`;
 
   // ── Row: left column (brake + gas) | right zone (drag steer) ──
   const touchRow = document.createElement('div');
   touchRow.className =
-    'mtr-touch-bar mtr-two-thumb mx-auto flex w-full max-w-[100vw] items-stretch gap-2 px-0.5 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] sm:gap-3 sm:px-1';
+    'mtr-touch-bar mtr-two-thumb mx-auto flex w-full max-w-[100vw] items-stretch gap-1.5 px-0.5 pb-0.5 pl-[max(0.45rem,env(safe-area-inset-left))] pr-[max(0.35rem,env(safe-area-inset-right))] sm:gap-3 sm:px-1 sm:pb-0';
 
   // Left column: brake on top, gas on bottom
   const touchColLeft = document.createElement('div');
@@ -391,7 +392,7 @@ export function buildGameUi(
   touchDetails.append(sumTip, tipP);
   const touchPad = document.createElement('div');
   touchPad.className =
-    'mtr-touch-pad mtr-show-touch-only pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/95 via-zinc-950/50 to-transparent pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-2';
+    'mtr-touch-pad mtr-show-touch-only pointer-events-none fixed inset-x-0 bottom-0 z-20 flex flex-col items-stretch bg-gradient-to-t from-zinc-950/72 via-zinc-950/28 to-transparent pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 sm:from-zinc-950/88 sm:via-zinc-950/45 sm:pb-[max(0.4rem,env(safe-area-inset-bottom))] sm:pt-2';
   touchPad.setAttribute('role', 'group');
   touchPad.setAttribute('aria-label', 'Control de conducción');
   touchPad.append(touchRow, touchDetails);

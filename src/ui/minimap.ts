@@ -7,7 +7,8 @@ const BASE_H = 208;
 const BASE_PAD = 10;
 
 /**
- * Tamaño del minimapa en píxeles CSS según el viewport: menos superficie en móviles.
+ * Tamaño del minimapa en píxeles CSS según el viewport.
+ * En móvil se reduce bastante para no tapar la vista ni los HUD centrados.
  */
 function getMinimapCssSize(): { w: number; h: number } {
   if (typeof window === 'undefined') {
@@ -15,9 +16,11 @@ function getMinimapCssSize(): { w: number; h: number } {
   }
   const iw = window.innerWidth;
   let w: number;
-  if (iw < 380) w = 96;
-  else if (iw < 480) w = 108;
-  else if (iw < 640) w = 128;
+  if (iw < 360) w = 72;
+  else if (iw < 400) w = 78;
+  else if (iw < 480) w = 90;
+  else if (iw < 640) w = 118;
+  else if (iw < 900) w = 148;
   else w = BASE_W;
   const h = Math.round(w * (BASE_H / BASE_W));
   return { w, h };
