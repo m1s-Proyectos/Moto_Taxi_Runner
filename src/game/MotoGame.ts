@@ -44,6 +44,8 @@ import {
   playCheckpointChime,
   playCoinCollect,
   playFinishFanfare,
+  playMultiplayerDefeat,
+  playMultiplayerVictory,
   unlockAudio,
 } from './feedback';
 import {
@@ -53,10 +55,25 @@ import {
   type SessionGameMode,
   updateRouteSegment,
 } from '../ui/buildGameUi';
-import type { PlayerPositionPayload } from '../lib/roomMembers';
+import {
+  createMpResultModal,
+  localWinsMpCompare,
+  MP_RACE_FORFEIT_PID,
+  starsForRaceTimeMs,
+  type MpResultModalApi,
+} from '../ui/mpResultModal';
+import type { PlayerPositionPayload, RaceResultPayload } from '../lib/roomMembers';
 import { OtherPlayer } from './OtherPlayer';
 import { addCheckpointStopMarkers, triggerPassengerAnim } from './passengerAnimations';
 import { drawMinimap } from '../ui/minimap';
+import {
+  bumpCoachSessionCount,
+  getCoachHintLine,
+  hasSeenRunTutorial,
+  markRunTutorialSeen,
+  shouldShowCoachStrip,
+  type CoachPhase,
+} from '../lib/runCoach';
 import { circleIntersectsObstacle, resolveCircleObstacle } from './collision';
 import { Coin } from './Coin';
 import { addBusStopGroundMarkings, getRoadFrameAtZ } from './stopGroundMarkings';
@@ -169,7 +186,7 @@ const HANDLING_PROFILES: Readonly<Record<HandlingProfileName, HandlingProfile>> 
     steerInMouseHz: 27,
     steerReleaseHz: 16,
     yawRateLow: 2.35,
-    yawRateHigh: 1.48,
+    yawRateHigh: 1.54,
     highSpeedSteerDamping: 0.34,
     steerAssistBaseHz: 2.1,
     steerAssistSpeedHz: 2.2,
@@ -299,7 +316,13 @@ export class MotoGame {
   /** Evita que `syncHud` pise el contador mientras corre la animación de monedas. */
   private walletHudLockUntilMs = 0;
 
-  private readonly sparks: Array<{ mesh: THREE.Mesh; age: number; vel: THREE.Vector3 }> = [];
+  private readonly sparks: Array<{
+    mesh: THREE.Mesh;
+    age: number;
+    vel: THREE.Vector3;
+    /** Si false, la geometría es compartida (no hacer dispose del geo). */
+    ownGeom: boolean;
+  }> = [];
   private lastBumpMs = 0;
   /** Evita múltiples penalizaciones por el mismo roce prolongado. */
   private wasTouchingVehicle = false;
@@ -322,6 +345,22 @@ export class MotoGame {
   private turboGlowMesh: THREE.Mesh | null = null;
 
   private mpCtx: MultiplayerGameCtx | null = null;
+  /** Monedas recogidas solo en esta carrera (multijugador: envío al rival). */
+  private runCoinsCollected = 0;
+  private mpLocalResult: RaceResultPayload | null = null;
+  private mpRemoteResult: RaceResultPayload | null = null;
+  private mpOutcomeUiShown = false;
+  private mpWaitRivalTimeout: number | null = null;
+  private mpResultModal: MpResultModalApi | null = null;
+  private camShakeAmp = 0;
+  private navArrowGroup: THREE.Group | null = null;
+  private sparkGeoSmall: THREE.BoxGeometry | null = null;
+  private sparkGeoLarge: THREE.BoxGeometry | null = null;
+  private sparkGeoCoin: THREE.SphereGeometry | null = null;
+  private mpLastSent: { x: number; z: number; ry: number; t: number } = { x: NaN, z: NaN, ry: NaN, t: 0 };
+  private tutorialOverlayEl: HTMLElement | null = null;
+  /** FOV base según viewport (móvil / escritorio); el tick suma un extra por velocidad. */
+  private cameraFovRig = 58;
   private readonly otherPlayers = new Map<string, OtherPlayer>();
   private positionBroadcastInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -386,14 +425,14 @@ export class MotoGame {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xe9f6ff, 100, 430);
 
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
+    this.camera = new THREE.PerspectiveCamera(this.cameraFovRig, 1, 0.1, 250);
     this.camera.position.set(0, 10, 14);
 
-    const ambient = new THREE.AmbientLight(0xf2f7ff, 1.02);
+    const ambient = new THREE.AmbientLight(0xf2f7ff, 1.1);
     this.scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0xb0ddff, 0xf2d8b8, 1.04);
+    const hemi = new THREE.HemisphereLight(0xb0ddff, 0xf2d8b8, 1.08);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffefbf, 1.12);
+    const sun = new THREE.DirectionalLight(0xffefbf, 1.18);
     sun.position.set(-56, 82, -18);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -471,14 +510,38 @@ export class MotoGame {
   }
 
   dispose(): void {
-    if (this.positionBroadcastInterval !== null) {
-      clearInterval(this.positionBroadcastInterval);
-      this.positionBroadcastInterval = null;
+    if (this.mpWaitRivalTimeout !== null) {
+      window.clearTimeout(this.mpWaitRivalTimeout);
+      this.mpWaitRivalTimeout = null;
     }
+    this.stopPositionBroadcast();
     if (this.mpCtx) {
       this.mpCtx.syncHandle.setPositionHandler(null);
+      this.mpCtx.syncHandle.setRaceResultHandler(null);
       this.mpCtx = null;
     }
+    this.mpResultModal?.destroy();
+    this.mpResultModal = null;
+    this.tutorialOverlayEl?.remove();
+    this.tutorialOverlayEl = null;
+    if (this.navArrowGroup) {
+      this.scene.remove(this.navArrowGroup);
+      this.navArrowGroup.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const m = o.material;
+          if (Array.isArray(m)) m.forEach((x) => x.dispose());
+          else m.dispose();
+        }
+      });
+      this.navArrowGroup = null;
+    }
+    this.sparkGeoSmall?.dispose();
+    this.sparkGeoLarge?.dispose();
+    this.sparkGeoCoin?.dispose();
+    this.sparkGeoSmall = null;
+    this.sparkGeoLarge = null;
+    this.sparkGeoCoin = null;
     for (const ghost of this.otherPlayers.values()) {
       ghost.dispose();
     }
@@ -534,19 +597,15 @@ export class MotoGame {
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
     this.renderer.domElement.focus({ preventScroll: true });
-
-    if (this.mpCtx) {
-      this.mpCtx.syncHandle.setPositionHandler((payload) =>
-        this.onRemotePosition(payload),
-      );
-      this.startPositionBroadcast();
-    }
+    bumpCoachSessionCount();
+    queueMicrotask(() => this.showRunTutorialIfNeeded());
   }
 
   private startPositionBroadcast(): void {
     if (this.positionBroadcastInterval !== null) return;
     this.positionBroadcastInterval = setInterval(() => {
       if (!this.mpCtx || !this.sessionStarted) return;
+      const now = performance.now();
       const payload: PlayerPositionPayload = {
         pid: this.mpCtx.playerId,
         x: this.bike.position.x,
@@ -554,8 +613,137 @@ export class MotoGame {
         z: this.bike.position.z,
         ry: this.bike.rotation.y,
       };
+      const lx = this.mpLastSent.x;
+      const quiet =
+        Number.isFinite(lx) &&
+        now - this.mpLastSent.t < 400 &&
+        Math.hypot(payload.x - lx, payload.z - this.mpLastSent.z) < 0.05 &&
+        Math.abs(payload.ry - this.mpLastSent.ry) < 0.045;
+      if (quiet) return;
+      this.mpLastSent = { x: payload.x, z: payload.z, ry: payload.ry, t: now };
       this.mpCtx.syncHandle.sendPosition(payload);
     }, 100);
+  }
+
+  private stopPositionBroadcast(): void {
+    if (this.positionBroadcastInterval !== null) {
+      clearInterval(this.positionBroadcastInterval);
+      this.positionBroadcastInterval = null;
+    }
+  }
+
+  private attachMultiplayerChannelHandlers(): void {
+    if (!this.mpCtx) return;
+    this.mpLastSent = { x: NaN, z: NaN, ry: NaN, t: 0 };
+    this.ensureMpResultModal();
+    this.mpCtx.syncHandle.setPositionHandler((payload) => this.onRemotePosition(payload));
+    this.mpCtx.syncHandle.setRaceResultHandler((payload) => this.onRemoteRaceResult(payload));
+    this.startPositionBroadcast();
+  }
+
+  private ensureMpResultModal(): void {
+    if (!this.mpCtx || this.mpResultModal) return;
+    this.mpResultModal = createMpResultModal(this.container, {
+      onAgain: () => {
+        this.mpResultModal?.hide();
+        this.resetRun();
+      },
+      onClose: () => this.mpResultModal?.hide(),
+    });
+  }
+
+  private clearMpMatchState(): void {
+    if (this.mpWaitRivalTimeout !== null) {
+      window.clearTimeout(this.mpWaitRivalTimeout);
+      this.mpWaitRivalTimeout = null;
+    }
+    this.mpLocalResult = null;
+    this.mpRemoteResult = null;
+    this.mpOutcomeUiShown = false;
+  }
+
+  private onRemoteRaceResult(payload: RaceResultPayload): void {
+    if (!this.mpCtx || payload.pid === this.mpCtx.playerId) return;
+    const coins = Math.max(0, Math.min(9999, Math.floor(Number(payload.coins)) || 0));
+    const timeMs = Math.max(0, Math.floor(Number(payload.timeMs)) || 0);
+    const wallFinishedAt = Math.max(0, Math.floor(Number(payload.wallFinishedAt)) || 0);
+    this.mpRemoteResult = { pid: payload.pid, coins, timeMs, wallFinishedAt };
+    this.maybeResolveMultiplayerOutcome();
+  }
+
+  private maybeResolveMultiplayerOutcome(): void {
+    if (!this.mpCtx || this.mpOutcomeUiShown) return;
+    const local = this.mpLocalResult;
+    if (!local) return;
+
+    const remote = this.mpRemoteResult;
+    if (!remote) {
+      this.ensureMpResultModal();
+      this.mpResultModal?.showWaiting();
+      if (this.mpWaitRivalTimeout === null) {
+        this.mpWaitRivalTimeout = window.setTimeout(() => {
+          this.mpWaitRivalTimeout = null;
+          if (!this.mpCtx || this.mpOutcomeUiShown || !this.mpLocalResult) return;
+          if (this.mpRemoteResult) return;
+          this.mpRemoteResult = {
+            pid: MP_RACE_FORFEIT_PID,
+            timeMs: 9_999_999,
+            coins: 0,
+            wallFinishedAt: 0,
+          };
+          this.maybeResolveMultiplayerOutcome();
+        }, 90_000);
+      }
+      return;
+    }
+
+    if (this.mpWaitRivalTimeout !== null) {
+      window.clearTimeout(this.mpWaitRivalTimeout);
+      this.mpWaitRivalTimeout = null;
+    }
+
+    const won = localWinsMpCompare(local, remote);
+    this.finalizeMultiplayerOutcome(won, local, remote);
+  }
+
+  private finalizeMultiplayerOutcome(
+    won: boolean,
+    local: RaceResultPayload,
+    remote: RaceResultPayload,
+  ): void {
+    if (!this.mpCtx || this.mpOutcomeUiShown) return;
+    this.mpOutcomeUiShown = true;
+    this.mpCtx.syncHandle.setRaceResultHandler(null);
+
+    this.ensureMpResultModal();
+    if (won) {
+      playMultiplayerVictory();
+      hapticFinish();
+      this.mpResultModal?.showWin({
+        stars: starsForRaceTimeMs(local.timeMs),
+        coins: local.coins,
+        timeLabel: fmtTime(local.timeMs),
+      });
+    } else {
+      playMultiplayerDefeat();
+      hapticBump();
+      this.mpResultModal?.showLose({
+        coinDiff: remote.coins - local.coins,
+        opponentTimeLabel: fmtTime(remote.timeMs),
+        yourCoins: local.coins,
+        opponentCoins: remote.coins,
+      });
+    }
+
+    if (isSupabaseConfigured()) {
+      void saveRaceRunToSupabase({
+        timeMs: local.timeMs,
+        bikeStyle: this.bikeStyle,
+        splitPupyMs: this.splitPupyMs,
+        splitPapaMs: this.splitPapaMs,
+        roomId: this.mpCtx.roomCode,
+      });
+    }
   }
 
   private onRemotePosition(payload: PlayerPositionPayload): void {
@@ -633,18 +821,122 @@ export class MotoGame {
       this.cameraBack = 6.6;
       this.cameraUp = 3.5;
       this.cameraLook = 2.5;
-      this.camera.fov = 50;
+      this.cameraFovRig = 50;
     } else if (isMobileRig) {
       this.cameraBack = 8.2;
       this.cameraUp = 4.8;
       this.cameraLook = 3.2;
-      this.camera.fov = 54;
+      this.cameraFovRig = 54;
     } else {
       this.cameraBack = 12;
       this.cameraUp = 7;
       this.cameraLook = 6;
-      this.camera.fov = 58;
+      this.cameraFovRig = 58;
     }
+    this.camera.fov = this.cameraFovRig;
+  }
+
+  private addCameraShake(amp: number): void {
+    this.camShakeAmp = Math.min(0.42, this.camShakeAmp + amp);
+  }
+
+  private ensureSharedSparkGeometries(): void {
+    if (this.sparkGeoSmall) return;
+    this.sparkGeoSmall = new THREE.BoxGeometry(0.07, 0.07, 0.07);
+    this.sparkGeoLarge = new THREE.BoxGeometry(0.11, 0.11, 0.11);
+    this.sparkGeoCoin = new THREE.SphereGeometry(0.045, 6, 6);
+  }
+
+  /** Flecha 3D hacia la próxima parada (solo en carrera). */
+  private createObjectiveArrow(): void {
+    if (this.navArrowGroup) return;
+    const g = new THREE.Group();
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.52, 1.55, 14, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xffe8a8,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      }),
+    );
+    cone.rotation.x = Math.PI / 2;
+    cone.position.y = 0.55;
+    g.add(cone);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.82, 0.06, 8, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xffcc55,
+        transparent: true,
+        opacity: 0.42,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    g.visible = false;
+    this.scene.add(g);
+    this.navArrowGroup = g;
+  }
+
+  private updateObjectiveNavigator(tSec: number): void {
+    const nav = this.navArrowGroup;
+    if (!nav) return;
+    const show =
+      this.sessionStarted && this.phase === 'racing' && this.nextCheckpointIndex < CHECKPOINTS.length;
+    nav.visible = show;
+    if (!show) return;
+    const cp = CHECKPOINTS[this.nextCheckpointIndex]!;
+    const bx = this.bike.position.x;
+    const bz = this.bike.position.z;
+    const dx = cp.center.x - bx;
+    const dz = cp.center.z - bz;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = dx / len;
+    const nz = dz / len;
+    const lift = 2.85 + 0.22 * Math.sin(tSec * 3.2);
+    const ahead = 4.4;
+    nav.position.set(bx + nx * ahead, lift, bz + nz * ahead);
+    nav.lookAt(cp.center.x, cp.center.y + 1.25, cp.center.z);
+    const pulse = 1 + 0.04 * Math.sin(tSec * 5);
+    nav.scale.setScalar(pulse);
+  }
+
+  private pulseCheckpointRings(tSec: number): void {
+    for (let i = 0; i < this.checkpointMeshes.length; i++) {
+      const ring = this.checkpointMeshes[i]!.children[0] as THREE.Mesh;
+      if (this.phase === 'racing' && i === this.nextCheckpointIndex) {
+        ring.scale.setScalar(1 + 0.055 * Math.sin(tSec * 6.2));
+      } else {
+        ring.scale.setScalar(1);
+      }
+    }
+  }
+
+  private showRunTutorialIfNeeded(): void {
+    if (hasSeenRunTutorial() || this.tutorialOverlayEl) return;
+    const el = document.createElement('div');
+    el.className =
+      'mtr-tutorial-overlay pointer-events-auto fixed inset-0 z-[55] flex items-center justify-center bg-zinc-950/72 p-4 backdrop-blur-md';
+    el.innerHTML = `
+      <div class="max-w-md rounded-2xl border border-amber-500/35 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 shadow-2xl shadow-amber-900/20">
+        <p class="text-center text-[10px] font-bold uppercase tracking-[0.35em] text-amber-400/95">Tutorial rápido</p>
+        <h2 class="mt-2 text-center text-xl font-bold text-zinc-50">Tu primera carrera</h2>
+        <ol class="mt-4 list-decimal space-y-2 pl-4 text-sm leading-relaxed text-zinc-300">
+          <li>Acelerá para subir al pasajero y salir de la parada inicial.</li>
+          <li>Seguí la <strong class="text-amber-200">flecha dorada</strong> y el minimapa hacia los círculos de parada.</li>
+          <li>Entrá al círculo brillante para bajar o subir pasajeros; recogé monedas y turbos en ruta.</li>
+        </ol>
+        <button type="button" class="mtr-tutorial-ok mt-6 w-full rounded-xl bg-amber-500 py-3 text-sm font-bold text-zinc-950 transition hover:bg-amber-400">¡Entendido, vamos!</button>
+      </div>`;
+    const btn = el.querySelector('.mtr-tutorial-ok') as HTMLButtonElement;
+    btn.addEventListener('click', () => {
+      markRunTutorialSeen();
+      el.remove();
+      this.tutorialOverlayEl = null;
+    });
+    this.container.appendChild(el);
+    this.tutorialOverlayEl = el;
   }
 
   private buildWorld(): void {
@@ -726,7 +1018,7 @@ export class MotoGame {
         new THREE.MeshBasicMaterial({
           color: cp.ringColor,
           transparent: true,
-          opacity: 0.85,
+          opacity: 0.92,
           side: THREE.DoubleSide,
         }),
       );
@@ -744,6 +1036,9 @@ export class MotoGame {
       this.scene.add(g);
       this.checkpointMeshes.push(g);
     }
+
+    this.ensureSharedSparkGeometries();
+    this.createObjectiveArrow();
 
     addCheckpointStopMarkers(this.scene);
     addBusStopGroundMarkings(this.scene);
@@ -817,6 +1112,7 @@ export class MotoGame {
       n += 1;
     }
     if (n > 0) {
+      this.runCoinsCollected += n;
       const before = getCoinWallet();
       addCoinsToWallet(n);
       const after = getCoinWallet();
@@ -965,6 +1261,9 @@ export class MotoGame {
   }
 
   private resetRun(): void {
+    this.clearMpMatchState();
+    this.mpResultModal?.hide();
+    this.runCoinsCollected = 0;
     this.phase = 'ready';
     this.nextCheckpointIndex = 0;
     this.raceElapsedMs = 0;
@@ -1001,6 +1300,8 @@ export class MotoGame {
     this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishNotice.classList.add('hidden');
     this.ui.finishNotice.textContent = '';
+    this.ui.finishCoins.classList.add('hidden');
+    this.ui.finishCoins.textContent = '';
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
     this.timeAttackFailed = false;
@@ -1008,6 +1309,10 @@ export class MotoGame {
 
     this.syncHud();
     this.updateCheckpointVisuals();
+
+    if (this.sessionStarted && this.mpCtx) {
+      this.attachMultiplayerChannelHandlers();
+    }
   }
 
   private showPassengerHud(dir: 'up' | 'down', text: string): void {
@@ -1067,12 +1372,14 @@ export class MotoGame {
       this.lastBumpMs = now;
       playBump();
       hapticBump();
+      this.addCameraShake(0.04);
     }
   }
 
   private beginStopExchange(isLastCheckpoint: boolean): void {
     this.speed = 0;
     this.phase = 'exchange';
+    this.addCameraShake(0.055);
     const now = performance.now();
     const stopNum = this.nextCheckpointIndex + 1;
     triggerPassengerAnim({
@@ -1099,6 +1406,7 @@ export class MotoGame {
     if (at === 0) this.splitPupyMs = this.raceElapsedMs;
     if (at === 1) this.splitPapaMs = this.raceElapsedMs;
     this.spawnSparkBurst(this.bike.position.clone(), false);
+    this.addCameraShake(0.07);
     playCheckpointChime();
     hapticCheckpoint();
     this.nextCheckpointIndex += 1;
@@ -1110,8 +1418,12 @@ export class MotoGame {
     if (this.nextCheckpointIndex >= CHECKPOINTS.length) return;
     this.timeAttackFailed = false;
     this.spawnSparkBurst(this.bike.position.clone(), true);
-    playFinishFanfare();
-    hapticFinish();
+    const isMp = this.mpCtx !== null;
+    if (!isMp) {
+      playFinishFanfare();
+      hapticFinish();
+      this.addCameraShake(0.09);
+    }
     this.nextCheckpointIndex += 1;
     this.updateCheckpointVisuals();
     this.finishedRaceMs = this.raceElapsedMs;
@@ -1120,6 +1432,30 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.hidePassengerHud();
     const total = this.finishedRaceMs ?? 0;
+
+    if (isMp && this.mpCtx) {
+      this.stopPositionBroadcast();
+      const payload: RaceResultPayload = {
+        pid: this.mpCtx.playerId,
+        timeMs: total,
+        coins: this.runCoinsCollected,
+        wallFinishedAt: Date.now(),
+      };
+      this.mpLocalResult = payload;
+      this.mpCtx.syncHandle.sendRaceResult(payload);
+      this.maybeResolveMultiplayerOutcome();
+      if (this.sessionGameMode === 'free') {
+        recordFreeModePersonalBestIfBetter(total);
+      }
+      this.ui.finishNotice.classList.add('hidden');
+      this.ui.finishNotice.textContent = '';
+      this.ui.finishOverlay.classList.add('hidden');
+      this.ui.finishCloud.classList.add('hidden');
+      this.ui.finishCloud.textContent = '';
+      this.syncHud();
+      return;
+    }
+
     if (this.sessionGameMode === 'free') {
       recordFreeModePersonalBestIfBetter(total);
     }
@@ -1127,6 +1463,15 @@ export class MotoGame {
     this.ui.finishNotice.textContent = '';
     this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishTime.textContent = `Tiempo: ${fmtTime(total)}`;
+    const earned = this.runCoinsCollected;
+    const walletTotal = getCoinWallet();
+    if (earned > 0) {
+      const unit = earned === 1 ? 'moneda' : 'monedas';
+      this.ui.finishCoins.textContent = `Ganaste ${earned} ${unit} en esta carrera. Se sumaron a tu billetera — saldo total: ${walletTotal}.`;
+    } else {
+      this.ui.finishCoins.textContent = `No recogiste monedas en esta carrera. Tu billetera sigue en ${walletTotal} monedas.`;
+    }
+    this.ui.finishCoins.classList.remove('hidden');
     this.ui.finishOverlay.classList.remove('hidden');
     this.syncHud();
 
@@ -1184,6 +1529,8 @@ export class MotoGame {
     this.ui.finishNotice.textContent =
       'Objetivos no completados: saliste de los límites — llegaste al final de la carretera sin completar todas las paradas.';
     this.ui.finishNotice.classList.remove('hidden');
+    this.ui.finishCoins.classList.add('hidden');
+    this.ui.finishCoins.textContent = '';
 
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
@@ -1207,6 +1554,8 @@ export class MotoGame {
     this.ui.finishTime.textContent = `Límite ${fmtTime(TIME_ATTACK_LIMIT_MS)} · Tiempo: ${fmtTime(this.raceElapsedMs)}`;
     this.ui.finishNotice.classList.add('hidden');
     this.ui.finishNotice.textContent = '';
+    this.ui.finishCoins.classList.add('hidden');
+    this.ui.finishCoins.textContent = '';
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
     this.ui.finishOverlay.classList.remove('hidden');
@@ -1218,21 +1567,21 @@ export class MotoGame {
   private clearSparks(): void {
     for (const s of this.sparks) {
       this.scene.remove(s.mesh);
-      s.mesh.geometry.dispose();
+      if (s.ownGeom) {
+        s.mesh.geometry.dispose();
+      }
       (s.mesh.material as THREE.MeshBasicMaterial).dispose();
     }
     this.sparks.length = 0;
   }
 
   private spawnSparkBurst(pos: THREE.Vector3, big: boolean): void {
+    this.ensureSharedSparkGeometries();
     const n = big ? 14 : 8;
-    const s = big ? 0.11 : 0.07;
+    const geo = big ? this.sparkGeoLarge! : this.sparkGeoSmall!;
     const col = big ? 0xffe066 : 0xffaa44;
     for (let i = 0; i < n; i++) {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(s, s, s),
-        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 }),
-      );
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 }));
       mesh.position.copy(pos).add(new THREE.Vector3(0, 0.45, 0));
       const vel = new THREE.Vector3(
         (Math.random() - 0.5) * 5.5,
@@ -1240,19 +1589,17 @@ export class MotoGame {
         (Math.random() - 0.5) * 5.5,
       );
       this.scene.add(mesh);
-      this.sparks.push({ mesh, age: 0, vel });
+      this.sparks.push({ mesh, age: 0, vel, ownGeom: false });
     }
   }
 
-  /** Partículas doradas al recoger moneda (reutiliza el mismo pool que chispas). */
+  /** Partículas doradas al recoger moneda (geometría compartida). */
   private spawnCoinSparkBurst(pos: THREE.Vector3): void {
+    this.ensureSharedSparkGeometries();
     const n = 16;
+    const geo = this.sparkGeoCoin!;
     for (let i = 0; i < n; i++) {
-      const r = 0.04 + Math.random() * 0.05;
-      const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r, 6, 6),
-        new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 1 }),
-      );
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 1 }));
       mesh.position.copy(pos).add(new THREE.Vector3(0, 0.35, 0));
       const vel = new THREE.Vector3(
         (Math.random() - 0.5) * 6.5,
@@ -1260,7 +1607,7 @@ export class MotoGame {
         (Math.random() - 0.5) * 6.5,
       );
       this.scene.add(mesh);
-      this.sparks.push({ mesh, age: 0, vel });
+      this.sparks.push({ mesh, age: 0, vel, ownGeom: false });
     }
   }
 
@@ -1372,6 +1719,10 @@ export class MotoGame {
     this.ui.speedValue.textContent = `${kph}`;
     const pct = Math.min(100, Math.max(0, Math.round((Math.abs(this.speed) / maxSpeed) * 100)));
     this.ui.speedBar.style.width = `${pct}%`;
+    const speedNormHud = Math.min(1, Math.abs(this.speed) / Math.max(0.01, maxSpeed));
+    const rush = this.sessionStarted && this.phase === 'racing' && speedNormHud > 0.82;
+    this.ui.hudRoot.classList.toggle('mtr-hud-speed-rush', rush);
+    this.ui.speedValue.classList.toggle('mtr-speed-val--peak', rush);
     if (this.turboBoostUntilMs !== null && performance.now() < this.turboBoostUntilMs) {
       this.ui.turboHudWrap.classList.remove('hidden');
       const rem = (this.turboBoostUntilMs - performance.now()) / TURBO.durationMs;
@@ -1379,6 +1730,43 @@ export class MotoGame {
     } else {
       this.ui.turboHudWrap.classList.add('hidden');
       this.ui.turboBarFill.style.width = '0%';
+    }
+
+    let coachPhase: CoachPhase = 'menu';
+    if (this.sessionStarted) {
+      coachPhase =
+        this.phase === 'ready'
+          ? 'ready'
+          : this.phase === 'boarding'
+            ? 'boarding'
+            : this.phase === 'exchange'
+              ? 'exchange'
+              : this.phase === 'racing'
+                ? 'racing'
+                : this.phase === 'done'
+                  ? 'done'
+                  : 'menu';
+    }
+    if (
+      shouldShowCoachStrip() &&
+      this.sessionStarted &&
+      !this.tutorialOverlayEl &&
+      this.phase !== 'done'
+    ) {
+      const hint = getCoachHintLine({
+        phase: coachPhase,
+        nextCheckpointIndex: this.nextCheckpointIndex,
+        bikeX: this.bike.position.x,
+        bikeZ: this.bike.position.z,
+      });
+      if (hint) {
+        this.ui.coachHint.textContent = hint;
+        this.ui.coachHint.classList.remove('hidden');
+      } else {
+        this.ui.coachHint.classList.add('hidden');
+      }
+    } else {
+      this.ui.coachHint.classList.add('hidden');
     }
 
     if (!this.sessionStarted) {
@@ -1704,6 +2092,7 @@ export class MotoGame {
               x = res.x;
               z = res.z;
               this.speed *= 0.15;
+              this.addCameraShake(0.065);
               // Force position update immediately
               this.bike.position.set(x, this.bike.position.y, z);
             }
@@ -1725,6 +2114,7 @@ export class MotoGame {
           // Force vehicle back onto road
           x = Math.sign(x) * 10.5;
           this.speed *= 0.1;
+          this.addCameraShake(0.05);
           this.bike.position.set(x, this.bike.position.y, z);
         }
 
@@ -1758,6 +2148,7 @@ export class MotoGame {
               tp.group.visible = false;
               this.turboBoostUntilMs = nowTick + TURBO.durationMs;
               this.speed = Math.min(this.getEffectiveMaxSpeed(), this.speed + 2.8);
+              this.addCameraShake(0.12);
               playCheckpointChime();
               hapticCheckpoint();
             }
@@ -1800,7 +2191,7 @@ export class MotoGame {
         const cp = CHECKPOINTS[this.nextCheckpointIndex]!;
         const dx = x - cp.center.x;
         const dz = z - cp.center.z;
-        if (dx * dx + dz * dz <= (cp.radius + PLAYER_RADIUS * 0.85) ** 2) {
+        if (dx * dx + dz * dz <= (cp.radius + PLAYER_RADIUS * 0.94) ** 2) {
           const isLast = this.nextCheckpointIndex === CHECKPOINTS.length - 1;
           this.beginStopExchange(isLast);
         }
@@ -1836,7 +2227,9 @@ export class MotoGame {
       mat.opacity = Math.max(0, 1 - s.age / 0.48);
       if (s.age > 0.55) {
         this.scene.remove(s.mesh);
-        s.mesh.geometry.dispose();
+        if (s.ownGeom) {
+          s.mesh.geometry.dispose();
+        }
         mat.dispose();
         this.sparks.splice(i, 1);
       }
@@ -1856,6 +2249,8 @@ export class MotoGame {
         }
       }
       if (picked > 0) {
+        this.runCoinsCollected += picked;
+        this.addCameraShake(0.035);
         const before = getCoinWallet();
         addCoinsToWallet(picked);
         const after = getCoinWallet();
@@ -1870,12 +2265,18 @@ export class MotoGame {
       }
     }
 
+    this.updateObjectiveNavigator(tSec);
+    this.pulseCheckpointRings(tSec);
     this.syncHud();
 
     if (this.sessionStarted) {
       for (let i = 0; i < OBSTACLES.length; i++) {
         obstacleFootprintForMinimap(OBSTACLES[i]!, tSec, this.minimapObstacleFp[i]!);
       }
+      const hi =
+        this.phase === 'racing' && this.nextCheckpointIndex < CHECKPOINTS.length
+          ? this.nextCheckpointIndex
+          : undefined;
       drawMinimap(
         this.ui.mapCanvas,
         {
@@ -1884,6 +2285,7 @@ export class MotoGame {
           rotY: this.bike.rotation.y,
         },
         this.minimapObstacleFp,
+        hi !== undefined ? { highlightNextIndex: hi, tSec } : null,
       );
     }
 
@@ -1902,6 +2304,21 @@ export class MotoGame {
       .add(forward.clone().multiplyScalar(this.cameraLook))
       .add(new THREE.Vector3(0, 1.1, 0));
     this.camera.lookAt(this.camTarget);
+
+    const turboOnFov = this.turboBoostUntilMs !== null && performance.now() < this.turboBoostUntilMs;
+    const maxSpFov = this.getEffectiveMaxSpeed();
+    const snFov = Math.min(1, Math.abs(this.speed) / Math.max(0.01, maxSpFov));
+    const targetFov = this.cameraFovRig + snFov * 3.6 + (turboOnFov ? 1.7 : 0);
+    this.camera.fov += (targetFov - this.camera.fov) * (1 - Math.exp(-5 * dt));
+    this.camera.updateProjectionMatrix();
+
+    if (this.camShakeAmp > 0.0004) {
+      this.camShakeAmp *= Math.exp(-11 * dt);
+      const sh = this.camShakeAmp;
+      this.camera.position.x += (Math.random() - 0.5) * sh * 2.4;
+      this.camera.position.y += (Math.random() - 0.5) * sh * 1.35;
+      this.camera.position.z += (Math.random() - 0.5) * sh * 2.4;
+    }
 
     for (const ghost of this.otherPlayers.values()) {
       ghost.update(dt);

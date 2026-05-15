@@ -28,6 +28,34 @@
   user-select: text;
 }
 
+/* Hero splash: scroll del logo/mototaxi cuando no cabe en pantalla */
+.splash-hero-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 191, 36, 0.55) rgba(15, 23, 42, 0.65);
+}
+
+.splash-hero-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.splash-hero-scroll::-webkit-scrollbar-track {
+  margin: 4px 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+}
+
+.splash-hero-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.4);
+  background: linear-gradient(180deg, rgba(103, 232, 249, 0.75), rgba(251, 191, 36, 0.85));
+}
+
+.splash-hero-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(165, 243, 252, 0.9), rgba(253, 224, 71, 0.95));
+}
+
 /* iOS: inputs con font-size>=16px evitan auto-zoom al enfocar */
 input, button, select, textarea {
   font-size: max(16px, 1em);
@@ -553,4 +581,88 @@ html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-ti
     opacity: 0;
     transform: translate3d(0, -18px, 0) scale(0.98);
   }
+}
+
+/* Multijugador: modal victoria / derrota */
+@keyframes mtrMpPopIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.mtr-mp-pop-in {
+  animation: mtrMpPopIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes mtrMpWaitPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleX(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.mtr-mp-wait-pulse {
+  animation: mtrMpWaitPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mtrMpWinBurst {
+  0% {
+    opacity: 0.25;
+    transform: translate3d(-50%, 0, 0) scale(0.6);
+  }
+  100% {
+    opacity: 0.55;
+    transform: translate3d(-50%, 0, 0) scale(1.15);
+  }
+}
+
+.mtr-mp-win-burst {
+  animation: mtrMpWinBurst 1.8s ease-out forwards;
+}
+
+.mtr-mp-star--on {
+  color: rgb(250 204 21);
+  text-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.4));
+}
+
+.mtr-mp-star--off {
+  color: rgb(63 63 70);
+}
+
+/* Pulso sutil en velocímetro a alto régimen */
+.mtr-speed-val--peak {
+  text-shadow:
+    0 0 14px rgba(251, 191, 36, 0.45),
+    0 0 28px rgba(245, 158, 11, 0.25);
+  color: rgb(254 252 232);
+}
+
+/* Viñeta + brillo cuando vas muy rápido (solo HUD, no canvas) */
+.mtr-hud-root.mtr-hud-speed-rush {
+  filter: drop-shadow(0 0 22px rgba(251, 191, 36, 0.12));
+}
+
+.mtr-hud-root.mtr-hud-speed-rush::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow: inset 0 0 90px rgba(0, 10, 30, 0.28);
+}
+
+/* Tutorial primera carrera */
+.mtr-tutorial-overlay {
+  animation: mtrMpPopIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

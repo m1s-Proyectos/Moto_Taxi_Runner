@@ -42,11 +42,19 @@ function xzToUv(
 
 const CP_COLORS = ['#34d399', '#62b4ff', '#fbbf24'];
 
+export type MinimapDrawOpts = {
+  /** Índice de `CHECKPOINTS` a resaltar (próxima parada). */
+  highlightNextIndex?: number;
+  /** Tiempo (s) para pulso del objetivo. */
+  tSec?: number;
+};
+
 export function drawMinimap(
   canvas: HTMLCanvasElement,
   player: { x: number; z: number; rotY: number } | null,
   /** Centros y semiejes de vehículos en calzada (mismo orden que `OBSTACLES`). */
   obstacleFootprints: ReadonlyArray<{ cx: number; cz: number; hw: number; hd: number }>,
+  opts?: MinimapDrawOpts | null,
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -115,6 +123,22 @@ export function drawMinimap(
     ctx.lineWidth = 1;
     ctx.stroke();
   });
+
+  const hi = opts?.highlightNextIndex;
+  const pulse = opts?.tSec != null ? 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(opts.tSec * 6)) : 1;
+  if (hi != null && hi >= 0 && hi < CHECKPOINTS.length) {
+    const cp = CHECKPOINTS[hi]!;
+    const { u, v } = xzToUv(cp.center.x, cp.center.z, cw, ch, PAD);
+    const r = (cpR + 3 * scale) * pulse;
+    ctx.beginPath();
+    ctx.arc(u, v, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.85)';
+    ctx.lineWidth = Math.max(2, 2.5 * scale);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(250, 250, 250, ${0.25 + 0.2 * pulse})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
   if (player) {
     const { u, v } = xzToUv(player.x, player.z, cw, ch, PAD);

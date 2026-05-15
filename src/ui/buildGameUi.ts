@@ -22,6 +22,7 @@ export type GameUiMode = 'practice' | 'multi';
  */
 export type MultiplayerGameCtx = {
   playerId: string;
+  roomCode: string;
   syncHandle: RoomSyncHandle;
 };
 
@@ -65,6 +66,8 @@ export type GameUiRefs = {
   finishCloud: HTMLElement;
   /** Mensaje extra (p. ej. límite ciudad sin objetivos). */
   finishNotice: HTMLElement;
+  /** Monedas ganadas en la carrera y saldo de billetera (modo práctica). */
+  finishCoins: HTMLElement;
   /** Contenedor de cuenta atrás (solo Time Attack). */
   timeAttackHud: HTMLElement;
   timeAttackBarFill: HTMLElement;
@@ -86,6 +89,8 @@ export type GameUiRefs = {
   coinWalletValue: HTMLElement;
   /** Popup corto «+N Coins» al recoger. */
   coinCollectPopup: HTMLElement;
+  /** Pista contextual (primeras carreras / onboarding). */
+  coachHint: HTMLElement;
 };
 
 function iconForStop(index: 0 | 1 | 2, state: 'done' | 'current' | 'pending'): string {
@@ -253,9 +258,18 @@ export function buildGameUi(
     'mtr-minimap-canvas rounded-md border border-zinc-700/70 bg-zinc-950/80 shadow-md shadow-black/40 backdrop-blur-[3px] sm:rounded-lg sm:border-zinc-800/90 sm:bg-zinc-950/85 sm:backdrop-blur-sm md:rounded-xl md:shadow-lg';
   mapWrap.append(mapLbl, mapCanvas);
 
+  const coachHint = document.createElement('div');
+  coachHint.dataset.role = 'coach-hint';
+  coachHint.className =
+    'pointer-events-none mt-1 max-w-[min(92vw,16rem)] self-end rounded-md border border-amber-500/20 bg-zinc-950/75 px-2 py-1.5 text-center text-[9px] font-medium leading-snug text-amber-100/90 shadow-sm shadow-black/30 backdrop-blur-sm transition-opacity duration-300 sm:max-w-[18rem] sm:text-[10px]';
+  coachHint.setAttribute('aria-live', 'polite');
+  coachHint.classList.add('hidden');
+
   const hudRoot = document.createElement('div');
+  hudRoot.dataset.role = 'hud-root';
   hudRoot.className =
-    'pointer-events-none fixed inset-0 z-10 opacity-0 transition-opacity duration-300 [&.mtr-hud-on]:opacity-100';
+    'mtr-hud-root pointer-events-none fixed inset-0 z-10 opacity-0 transition-opacity duration-500 ease-out [&.mtr-hud-on]:opacity-100';
+  mapWrap.append(mapLbl, mapCanvas, coachHint);
   hudRoot.append(routeCol, timerCol, mapWrap);
 
   const kbd = document.createElement('div');
@@ -288,7 +302,8 @@ export function buildGameUi(
     'mtr-hud-speed-wrap pointer-events-none fixed z-10 flex flex-col items-end right-3';
   const speedValue = document.createElement('span');
   speedValue.dataset.role = 'speed-val';
-  speedValue.className = 'pr-1 text-4xl font-semibold italic tracking-tight tabular-nums text-zinc-50';
+  speedValue.className =
+    'pr-1 text-4xl font-semibold italic tracking-tight tabular-nums text-zinc-50 transition-[color,text-shadow] duration-200';
   speedValue.textContent = '0';
   const speedRow = document.createElement('div');
   speedRow.className = 'flex items-baseline gap-1.5 text-zinc-50';
@@ -592,7 +607,7 @@ export function buildGameUi(
       <p data-role="finish-time" class="mt-3 font-mono text-lg text-amber-400/95">Tiempo: 0:00.00</p>
       <p data-role="finish-notice" class="mt-3 hidden rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-sm font-medium leading-snug text-amber-100/95" role="status"></p>
       <p data-role="finish-cloud" class="mt-2 hidden min-h-[1.25rem] text-xs text-zinc-500" aria-live="polite"></p>
-      <p class="mt-2 text-sm leading-relaxed text-zinc-400">Desempate (si aplica): menor tiempo en el último tramo (casa de mamá), luego el anterior.</p>
+      <p data-role="finish-coins" class="mt-3 hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm leading-relaxed text-amber-100/95"></p>
       <div class="mt-6 flex flex-col gap-4">
         <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <button type="button" data-role="again" class="min-h-[48px] flex-1 rounded-xl bg-zinc-100 px-4 py-3 text-center text-sm font-semibold text-zinc-950 shadow-sm hover:bg-white active:scale-[0.99] sm:min-h-0 sm:py-2.5">Otra carrera</button>
@@ -633,6 +648,7 @@ export function buildGameUi(
   const finishTitle = q(finishOverlay, '[data-role="finish-title"]');
   const finishTime = q(finishOverlay, '[data-role="finish-time"]');
   const finishNotice = q(finishOverlay, '[data-role="finish-notice"]');
+  const finishCoins = q(finishOverlay, '[data-role="finish-coins"]');
   const finishCloud = q(finishOverlay, '[data-role="finish-cloud"]');
   const btnAgain = q(finishOverlay, '[data-role="again"]') as HTMLButtonElement;
   const btnFinishClose = q(finishOverlay, '[data-role="finish-close"]') as HTMLButtonElement;
@@ -775,7 +791,7 @@ export function buildGameUi(
         onStartRaceBroadcast: () => {
           if (menuOverlay.classList.contains('hidden')) return;
           const mpCtx: MultiplayerGameCtx | null = mpSync
-            ? { playerId: prof.id, syncHandle: mpSync }
+            ? { playerId: prof.id, roomCode: created.roomCode, syncHandle: mpSync }
             : null;
           handlers.onStart(sessionMode, mpCtx);
         },
@@ -918,7 +934,7 @@ export function buildGameUi(
       onStartRaceBroadcast: () => {
         if (menuOverlay.classList.contains('hidden')) return;
         const mpCtx: MultiplayerGameCtx | null = mpSync
-          ? { playerId: prof.id, syncHandle: mpSync }
+          ? { playerId: prof.id, roomCode: target, syncHandle: mpSync }
           : null;
         handlers.onStart(sessionMode, mpCtx);
       },
@@ -979,6 +995,7 @@ export function buildGameUi(
     finishTitle,
     finishTime,
     finishNotice,
+    finishCoins,
     finishCloud,
     timeAttackHud,
     timeAttackBarFill,
@@ -993,5 +1010,6 @@ export function buildGameUi(
     pcControlsHintText,
     coinWalletValue,
     coinCollectPopup,
+    coachHint,
   };
 }

@@ -96,7 +96,7 @@ let pointerSteer = 0;
 let pointerDrivePointerId: number | null = null;
 
 const SELECTOR_BLOCK_POINTER_DRIVER =
-  '.mtr-touch-pad,.mtr-menu-overlay,.mtr-finish-overlay,.splash-root';
+  '.mtr-touch-pad,.mtr-menu-overlay,.mtr-finish-overlay,.mtr-mp-result-overlay,.mtr-tutorial-overlay,.splash-root';
 
 function isPointerDriverBlockedByTopLayer(e: PointerEvent, canvas: HTMLElement): boolean {
   if (e.target !== canvas) return true;

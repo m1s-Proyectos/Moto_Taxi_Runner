@@ -118,12 +118,18 @@ export function mountSplashScreen(
       </main>
 
       <section class="relative order-1 flex w-full min-w-0 flex-col items-center gap-3 md:order-2 md:pt-4">
-        <div class="splash-hero relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)] sm:rounded-[1.8rem] lg:max-w-[600px]">
+        <div class="splash-hero relative flex w-full max-h-[min(82dvh,calc(100dvh-4.5rem))] max-w-[560px] flex-col overflow-hidden rounded-2xl border border-white/18 bg-slate-950/45 shadow-[0_20px_60px_rgba(2,6,23,0.55)] sm:max-h-[min(78dvh,calc(100dvh-5rem))] sm:rounded-[1.8rem] lg:max-w-[600px]">
           <div class="pointer-events-none absolute inset-0 z-[1] [background:radial-gradient(circle_at_75%_24%,rgba(250,204,21,0.24),transparent_35%),radial-gradient(circle_at_18%_40%,rgba(56,189,248,0.24),transparent_42%),linear-gradient(145deg,rgba(8,47,73,0.44),rgba(30,41,59,0.55))]"></div>
           <div class="pointer-events-none absolute inset-0 z-[2] [background:repeating-linear-gradient(105deg,rgba(255,255,255,0.06)_0,rgba(255,255,255,0.06)_1px,transparent_1px,transparent_14px)]"></div>
 
-          <!-- Contenedor de imagen: altura ampliada para presencia visual -->
-          <div class="relative z-[3] flex min-h-[78vw] w-full items-center justify-center sm:min-h-[420px] md:min-h-[460px] lg:aspect-[16/11] lg:min-h-[480px]">
+          <!-- Logo / moto: scroll vertical si no cabe en pantalla -->
+          <div
+            class="splash-hero-scroll relative z-[3] min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+            tabindex="0"
+            role="region"
+            aria-label="Vista del mototaxi — desplázate si no ves todo"
+          >
+          <div class="relative flex min-h-[min(78vw,52vh)] w-full items-center justify-center py-2 sm:min-h-[380px] md:min-h-[420px] lg:min-h-[440px]">
             <!-- Fondo borroso (no scale, no recorte) -->
             <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
               class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-32 blur-sm [filter:saturate(1.22)_brightness(0.88)]"
@@ -150,9 +156,11 @@ export function mountSplashScreen(
             <div class="pointer-events-none absolute bottom-3 left-3 rounded-full border border-cyan-200/55 bg-cyan-200/12 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-cyan-50 sm:bottom-4 sm:left-4 sm:px-2.5 sm:py-1 sm:text-[9px]">Speed FX</div>
             <div class="pointer-events-none absolute bottom-3 right-3 rounded-full border border-amber-200/55 bg-amber-200/12 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] text-amber-50 sm:bottom-4 sm:right-4 sm:px-2.5 sm:py-1 sm:text-[9px]">Nitro Glow</div>
           </div>
+            <p class="pointer-events-none sticky bottom-0 z-[4] mt-1 bg-gradient-to-t from-slate-950/90 via-slate-950/70 to-transparent pb-1 pt-3 text-center text-[8px] font-semibold uppercase tracking-[0.14em] text-cyan-200/75 sm:text-[9px]">Desliza para ver el mototaxi</p>
+          </div>
 
-          <!-- Área del botón CTA -->
-          <div class="relative z-[4] flex flex-col items-center justify-center gap-2 overflow-hidden border-t border-white/12 px-4 py-3 sm:gap-2.5 sm:px-5 sm:py-4">
+          <!-- Área del botón CTA (fija al pie de la tarjeta) -->
+          <div class="relative z-[4] flex shrink-0 flex-col items-center justify-center gap-2 overflow-hidden border-t border-white/12 px-4 py-3 sm:gap-2.5 sm:px-5 sm:py-4">
             <img src="${MOTO_HOME_PRIMARY}" alt="" aria-hidden="true"
               class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-22 blur-md [filter:saturate(1.25)_brightness(0.80)]"
               decoding="async" />

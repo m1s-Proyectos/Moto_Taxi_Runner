@@ -118,6 +118,9 @@ export const START_RACE_BROADCAST_EVENT = 'START_EVENT';
 /** Evento Broadcast para sincronizar posición de la moto en tiempo real (10 fps). */
 export const POSITION_BROADCAST_EVENT = 'POSITION';
 
+/** Fin de carrera en sala: ambos clientes comparan para victoria / derrota. */
+export const RACE_RESULT_BROADCAST_EVENT = 'RACE_RESULT';
+
 /** Datos de posición enviados por broadcast cada 100 ms por cada cliente. */
 export type PlayerPositionPayload = {
   /** player_id del emisor (para ignorar la posición propia). */
@@ -127,6 +130,17 @@ export type PlayerPositionPayload = {
   z: number;
   /** bike.rotation.y en radianes. */
   ry: number;
+};
+
+/** Resultado al completar la ruta (multijugador). */
+export type RaceResultPayload = {
+  pid: string;
+  /** Tiempo de carrera acumulado en pista (ms). */
+  timeMs: number;
+  /** Monedas recogidas en esta carrera (no el saldo total de cartera). */
+  coins: number;
+  /** Marca de tiempo (epoch ms) al cruzar meta; desempate si tiempo y monedas empatan. */
+  wallFinishedAt: number;
 };
 
 /** El anfitrión es el jugador con `joined_at` más antiguo en la sala. */
@@ -170,11 +184,13 @@ export type RoomSyncHandle = {
   sendStartRace: () => Promise<{ ok: true } | { ok: false; message: string }>;
   /** Fire-and-forget: emite la posición local al canal de la sala. */
   sendPosition: (payload: PlayerPositionPayload) => void;
+  sendRaceResult: (payload: RaceResultPayload) => void;
   /**
    * Registra (o elimina) el manejador que recibe las posiciones de otros jugadores.
    * Llamar con `null` desactiva la recepción (ej. al salir de la partida).
    */
   setPositionHandler: (fn: ((payload: PlayerPositionPayload) => void) | null) => void;
+  setRaceResultHandler: (fn: ((payload: RaceResultPayload) => void) | null) => void;
 };
 
 /**
@@ -193,6 +209,7 @@ export function subscribeToRoomSync(roomCode: string, callbacks: RoomSyncCallbac
   };
 
   let positionHandler: ((payload: PlayerPositionPayload) => void) | null = null;
+  let raceResultHandler: ((payload: RaceResultPayload) => void) | null = null;
 
   const channel: RealtimeChannel = sb
     .channel(`mtr_room:${code}`, {
@@ -213,6 +230,11 @@ export function subscribeToRoomSync(roomCode: string, callbacks: RoomSyncCallbac
         positionHandler(payload as PlayerPositionPayload);
       }
     })
+    .on('broadcast', { event: RACE_RESULT_BROADCAST_EVENT }, ({ payload }: { payload: unknown }) => {
+      if (raceResultHandler && payload && typeof payload === 'object') {
+        raceResultHandler(payload as RaceResultPayload);
+      }
+    })
     .subscribe();
 
   void refresh();
@@ -220,6 +242,7 @@ export function subscribeToRoomSync(roomCode: string, callbacks: RoomSyncCallbac
   return {
     unsubscribe: () => {
       positionHandler = null;
+      raceResultHandler = null;
       void sb.removeChannel(channel);
     },
     sendStartRace: async () => {
@@ -240,8 +263,18 @@ export function subscribeToRoomSync(roomCode: string, callbacks: RoomSyncCallbac
         payload,
       });
     },
+    sendRaceResult: (payload: RaceResultPayload) => {
+      void channel.send({
+        type: 'broadcast',
+        event: RACE_RESULT_BROADCAST_EVENT,
+        payload,
+      });
+    },
     setPositionHandler: (fn) => {
       positionHandler = fn;
+    },
+    setRaceResultHandler: (fn) => {
+      raceResultHandler = fn;
     },
   };
 }
