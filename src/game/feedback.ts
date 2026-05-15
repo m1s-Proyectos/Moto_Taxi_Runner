@@ -45,6 +45,13 @@ export function playFinishFanfare(): void {
   tone(659, 0.22, 0.2, 0.09);
 }
 
+/** Sonido corto al recoger moneda (sin archivo externo). */
+export function playCoinCollect(): void {
+  unlockAudio();
+  tone(880, 0, 0.05, 0.055, 'triangle');
+  tone(1320, 0.04, 0.08, 0.045, 'sine');
+}
+
 export function playBump(): void {
   unlockAudio();
   const c = ctx();

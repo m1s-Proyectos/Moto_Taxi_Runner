@@ -29,7 +29,11 @@ const icDevice = `<svg class="h-4 w-4 text-cyan-400/80" fill="none" stroke="curr
  * Pantalla de inicio estilo mockup `public/img/home.jpg`: neón, vidrio, GSAP.
  * Al pulsar INICIAR se anima la salida y se llama `onComplete`.
  */
-export function mountSplashScreen(host: HTMLElement, onComplete: () => void): void {
+export function mountSplashScreen(
+  host: HTMLElement,
+  onComplete: () => void,
+  options?: { onOpenGarage?: () => void },
+): void {
   host.textContent = '';
   // ROOT CAUSE FIX #2 (scroll): el <body> es el ÚNICO scroll container.
   // Antes añadíamos `overflow-y-auto` aquí -> creaba container anidado y en
@@ -153,6 +157,10 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
               class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-22 blur-md [filter:saturate(1.25)_brightness(0.80)]"
               decoding="async" />
             <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/45 via-slate-900/25 to-slate-900/60"></div>
+            <button type="button" data-splash-garage
+              class="relative z-[1] w-full rounded-xl border-2 border-cyan-400/55 bg-slate-950/55 px-5 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.25)] backdrop-blur-sm transition active:scale-[0.98] sm:w-auto">
+              🪙 Taller / mejoras
+            </button>
             <button type="button" data-splash-start
               class="splash-cta relative z-[1] group flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-300 bg-gradient-to-b from-amber-300 to-orange-400 px-6 py-3.5 text-sm font-black uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_30px_rgba(251,191,36,0.5)] transition active:scale-[0.97] sm:w-auto sm:px-8 sm:py-3 sm:text-sm sm:tracking-[0.2em]">
               ${icBolt}
@@ -296,6 +304,25 @@ export function mountSplashScreen(host: HTMLElement, onComplete: () => void): vo
         pingEl.textContent = `${Math.round(v)} ms`;
       }, 420);
     }
+
+    const btnGarage = root.querySelector<HTMLButtonElement>('[data-splash-garage]');
+
+    btnGarage?.addEventListener('click', () => {
+      if (!options?.onOpenGarage) return;
+      btnGarage.disabled = true;
+      if (btn) btn.disabled = true;
+      if (pingId) window.clearInterval(pingId);
+      gsap.to(root, {
+        opacity: 0,
+        filter: 'blur(12px)',
+        duration: 0.55,
+        ease: 'power2.in',
+        onComplete: () => {
+          root.remove();
+          options.onOpenGarage!();
+        },
+      });
+    });
 
     btn?.addEventListener('click', () => {
       btn.disabled = true;

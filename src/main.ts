@@ -2,6 +2,7 @@ import './style.css';
 import { initDeviceInputProfile } from './lib/deviceInputProfile';
 import { isVibeJamPortalArrival } from './lib/vibeJamPortal';
 import { mountSplashScreen } from './ui/splashScreen';
+import { mountGarage } from './ui/garageScreen';
 import { MotoGame } from './game/MotoGame';
 
 initDeviceInputProfile();
@@ -18,8 +19,15 @@ const appHost = getAppHost();
 
 let activeGame: MotoGame | null = null;
 
+function showGarage(): void {
+  mountGarage(appHost, {
+    onBack: () => showSplash(),
+    onPlay: () => startGame(),
+  });
+}
+
 function showSplash(): void {
-  mountSplashScreen(appHost, startGame);
+  mountSplashScreen(appHost, () => startGame(), { onOpenGarage: showGarage });
 }
 
 function startGame(): void {

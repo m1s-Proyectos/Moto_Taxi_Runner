@@ -3,7 +3,6 @@ import {
   CHECKPOINTS,
   CONTACT_TIME_PENALTY_MS,
   OBSTACLES,
-  PHYS,
   PLAYER_RADIUS,
   SPAWN,
   TURBO,
@@ -43,6 +42,7 @@ import {
   hapticFinish,
   playBump,
   playCheckpointChime,
+  playCoinCollect,
   playFinishFanfare,
   unlockAudio,
 } from './feedback';
@@ -58,6 +58,10 @@ import { OtherPlayer } from './OtherPlayer';
 import { addCheckpointStopMarkers, triggerPassengerAnim } from './passengerAnimations';
 import { drawMinimap } from '../ui/minimap';
 import { circleIntersectsObstacle, resolveCircleObstacle } from './collision';
+import { Coin } from './Coin';
+import { addBusStopGroundMarkings, getRoadFrameAtZ } from './stopGroundMarkings';
+import { addCoinsToWallet, getCoinWallet } from '../lib/coinWallet';
+import { animateWalletNumber } from '../lib/walletHudAnimate';
 import {
   attachKeyboard,
   attachMouseAim,
@@ -74,9 +78,16 @@ import { tickCityShaders } from '../lib/cityShaders';
 import { getUseMobileGameUi } from '../lib/deviceInputProfile';
 import { createNightSky, type NightSky } from './nightSky';
 import { ensureLocalFreeProfile, recordFreeModePersonalBestIfBetter } from '../lib/localFreeProfile';
+import {
+  getRideTuningForCurrentGarage,
+  loadGarageProgress,
+  saveGarageProgress,
+  type RideTuningSnapshot,
+} from '../lib/motoUpgrades';
 import { isSupabaseConfigured, saveRaceRunToSupabase } from '../lib/raceRuns';
 import { DriftTrail } from './driftTrail';
 import { createDefaultTurboPickups, updateTurboPickupFloat, type TurboPickupInstance } from './turboPickups';
+import { ExhaustSmoke } from './exhaustSmoke';
 import { addTrafficLightsToScene, isInActiveGreenCorridor } from './trafficLights';
 import { getAsphaltColorMap, getAsphaltNormalMap, getSidewalkMap } from '../lib/proceduralTextures';
 
@@ -283,6 +294,10 @@ export class MotoGame {
 
   private speed = 0;
   private currentSteer = 0;
+  private readonly coins: Coin[] = [];
+  private coinPopupHideTimeout: number | null = null;
+  /** Evita que `syncHud` pise el contador mientras corre la animación de monedas. */
+  private walletHudLockUntilMs = 0;
 
   private readonly sparks: Array<{ mesh: THREE.Mesh; age: number; vel: THREE.Vector3 }> = [];
   private lastBumpMs = 0;
@@ -301,6 +316,10 @@ export class MotoGame {
   private bikeDriftLastYaw: number;
   private turboPickups: TurboPickupInstance[] = [];
   private turboBoostUntilMs: number | null = null;
+  /** Mejoras del taller: se recarga al iniciar sesión (monedas / compras desde splash). */
+  private rideTuning: RideTuningSnapshot = getRideTuningForCurrentGarage();
+  private exhaustSmoke: ExhaustSmoke | null = null;
+  private turboGlowMesh: THREE.Mesh | null = null;
 
   private mpCtx: MultiplayerGameCtx | null = null;
   private readonly otherPlayers = new Map<string, OtherPlayer>();
@@ -403,6 +422,7 @@ export class MotoGame {
     this.bikeDriftLastYaw = SPAWN.rotationY;
     this.scene.add(this.bike);
     mountBikeStyle(this.bike, initialBike);
+    this.attachTurboGlowMesh();
 
     this.resetRun();
 
@@ -463,6 +483,18 @@ export class MotoGame {
       ghost.dispose();
     }
     this.otherPlayers.clear();
+    if (this.coinPopupHideTimeout !== null) {
+      clearTimeout(this.coinPopupHideTimeout);
+      this.coinPopupHideTimeout = null;
+    }
+
+    for (const c of this.coins) c.dispose(this.scene);
+    this.coins.length = 0;
+
+    if (this.exhaustSmoke) {
+      this.exhaustSmoke.dispose(this.scene);
+      this.exhaustSmoke = null;
+    }
 
     window.cancelAnimationFrame(this.raf);
     this.resizeObserver?.disconnect();
@@ -493,6 +525,11 @@ export class MotoGame {
     this.loopAudio.unlock();
     this.loopAudio.startLoops();
     this.sessionStarted = true;
+    this.refreshRideTuning();
+    const gProg = loadGarageProgress();
+    if (gProg.bikeStyle !== this.bikeStyle) {
+      this.applyBikeStyle(gProg.bikeStyle);
+    }
     this.ui.menuOverlay.classList.add('hidden');
     this.ui.hudRoot.classList.add('mtr-hud-on');
     this.resetRun();
@@ -534,7 +571,38 @@ export class MotoGame {
   private applyBikeStyle(style: BikeStyle): void {
     this.bikeStyle = style;
     writeStoredBikeStyle(style);
+    const prog = loadGarageProgress();
+    prog.bikeStyle = style;
+    saveGarageProgress(prog);
     mountBikeStyle(this.bike, style);
+    this.attachTurboGlowMesh();
+  }
+
+  /** Anillo de resplandor bajo la moto (intensidad según turbo equipado). */
+  private attachTurboGlowMesh(): void {
+    if (this.turboGlowMesh) {
+      this.bike.remove(this.turboGlowMesh);
+      this.turboGlowMesh.geometry.dispose();
+      (this.turboGlowMesh.material as THREE.Material).dispose();
+      this.turboGlowMesh = null;
+    }
+    const geo = new THREE.SphereGeometry(1.25, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x5cf0ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, 0.42, 0.15);
+    mesh.renderOrder = 3;
+    this.turboGlowMesh = mesh;
+    this.bike.add(mesh);
+  }
+
+  private refreshRideTuning(): void {
+    this.rideTuning = getRideTuningForCurrentGarage();
   }
 
   private onResize = (): void => {
@@ -678,10 +746,92 @@ export class MotoGame {
     }
 
     addCheckpointStopMarkers(this.scene);
+    addBusStopGroundMarkings(this.scene);
 
     this.turboPickups = createDefaultTurboPickups(this.scene);
+    this.spawnCoinsNearStops();
     addTrafficLightsToScene(this.scene);
+    if (!this.exhaustSmoke) {
+      this.exhaustSmoke = new ExhaustSmoke(this.scene);
+    }
     this.addVibeJamPortals();
+  }
+
+  /**
+   * Monedas flotantes por parada. La última parada: cluster en la aproximación (antes del centro),
+   * para recoger con calma sin quedar pegado al disparador de bajada / fin de carrera.
+   */
+  private spawnCoinsNearStops(): void {
+    const baseY = 1.68;
+    /** Metros hacia la entrada (Z mayor) respecto al centro de la última parada. */
+    const finalApproachZOffset = 18;
+
+    for (const c of this.coins) c.dispose(this.scene);
+    this.coins.length = 0;
+
+    /** lateral (m), avance a lo largo de la tangente (m), bump Y (m). */
+    const spotsDefault: [number, number, number][] = [
+      [0, 2.0, 0.2],
+      [-1.1, 0.95, 0.1],
+      [1.1, 0.95, -0.05],
+      [-1.35, 2.9, 0],
+      [1.35, 2.9, 0],
+      [0, 0.25, 0.22],
+    ];
+    /** Última parada: cluster en la recta de aproximación (fwd repartido hacia la parada). */
+    const spotsFinal: [number, number, number][] = [
+      [0, -2.2, 0.3],
+      [-1.15, -1.35, 0.16],
+      [1.15, -1.35, 0.14],
+      [-1.35, -0.4, 0.2],
+      [1.35, -0.4, 0.18],
+      [0, 0.35, 0.26],
+    ];
+
+    let phaseSeed = 0;
+    for (let ci = 0; ci < CHECKPOINTS.length; ci++) {
+      const cp = CHECKPOINTS[ci]!;
+      const isFinal = ci === CHECKPOINTS.length - 1;
+      const zFrame = isFinal ? cp.center.z + finalApproachZOffset : cp.center.z;
+      const u = getRoadFrameAtZ(zFrame);
+      const spots = isFinal ? spotsFinal : spotsDefault;
+      const role = isFinal ? ('final_stop' as const) : ('default' as const);
+      for (const [lat, fwd, yBump] of spots) {
+        const x = u.cx + u.rx * lat + u.fx * fwd;
+        const z = u.cz + u.rz * lat + u.fz * fwd;
+        const coin = new Coin(new THREE.Vector3(x, baseY + yBump, z), phaseSeed++, role);
+        this.scene.add(coin.mesh);
+        this.coins.push(coin);
+      }
+    }
+  }
+
+  /** Acredita al wallet las monedas finales que aún estaban en pista (p. ej. si no las alcanzaste al acercarte). */
+  private forceGrantUncollectedFinalCoins(): void {
+    let n = 0;
+    for (const c of this.coins) {
+      if (c.trackRole !== 'final_stop' || c.collected) continue;
+      c.collected = true;
+      c.mesh.visible = false;
+      this.spawnCoinSparkBurst(c.mesh.position.clone());
+      n += 1;
+    }
+    if (n > 0) {
+      const before = getCoinWallet();
+      addCoinsToWallet(n);
+      const after = getCoinWallet();
+      this.walletHudLockUntilMs = performance.now() + 420;
+      animateWalletNumber(this.ui.coinWalletValue, before, after, 400);
+      playCoinCollect();
+      this.flashCoinPopup(n);
+    }
+  }
+
+  /** Devuelve las monedas al estado recogible al reiniciar la carrera (misma escena 3D). */
+  private resetCoinsForRun(): void {
+    for (const c of this.coins) {
+      c.reset();
+    }
   }
 
   /** Anillos webring Vibe Jam 2026: salida a hub, vuelta a `ref` si vino de otro juego. */
@@ -793,13 +943,14 @@ export class MotoGame {
   }
 
   private getEffectiveMaxSpeed(): number {
+    const base = this.rideTuning.maxSpeed;
     if (this.turboBoostUntilMs === null) {
-      return PHYS.maxSpeed;
+      return base;
     }
     if (performance.now() >= this.turboBoostUntilMs) {
-      return PHYS.maxSpeed;
+      return base;
     }
-    return PHYS.maxSpeed * TURBO.maxSpeedMult;
+    return base * this.rideTuning.turboMaxSpeedMult;
   }
 
   private syncObstacleTransform(index: number, tSec: number): void {
@@ -826,6 +977,7 @@ export class MotoGame {
     this.speed = 0;
     this.awaitingManualLaunch = false;
     this.currentSteer = 0;
+    this.resetCoinsForRun();
     this.lastBumpMs = 0;
     this.wasTouchingVehicle = false;
     this.vibePortalExitDone = false;
@@ -834,6 +986,7 @@ export class MotoGame {
 
     this.clearSparks();
     this.driftTrail.clear();
+    this.exhaustSmoke?.clear();
     for (const tp of this.turboPickups) {
       tp.active = true;
     }
@@ -846,6 +999,8 @@ export class MotoGame {
 
     this.ui.finishOverlay.classList.add('hidden');
     this.ui.finishTitle.textContent = '¡Llegaste!';
+    this.ui.finishNotice.classList.add('hidden');
+    this.ui.finishNotice.textContent = '';
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
     this.timeAttackFailed = false;
@@ -968,6 +1123,8 @@ export class MotoGame {
     if (this.sessionGameMode === 'free') {
       recordFreeModePersonalBestIfBetter(total);
     }
+    this.ui.finishNotice.classList.add('hidden');
+    this.ui.finishNotice.textContent = '';
     this.ui.finishTitle.textContent = '¡Llegaste!';
     this.ui.finishTime.textContent = `Tiempo: ${fmtTime(total)}`;
     this.ui.finishOverlay.classList.remove('hidden');
@@ -1005,6 +1162,38 @@ export class MotoGame {
     }
   }
 
+  /**
+   * Llegó al límite de la ciudad (WORLD_CITY_END_Z) sin haber completado todas las paradas.
+   */
+  private finishRaceWorldBoundaryIncomplete(): void {
+    if (this.phase !== 'racing') return;
+    if (this.nextCheckpointIndex >= CHECKPOINTS.length) return;
+
+    this.speed = 0;
+    this.phase = 'done';
+    this.awaitingManualLaunch = false;
+    this.finishedRaceMs = this.raceElapsedMs;
+    this.hidePassengerHud();
+    this.exchangeMode = null;
+    this.exchangeUntilMs = null;
+    this.boardingUntilMs = null;
+
+    const total = this.finishedRaceMs ?? 0;
+    this.ui.finishTitle.textContent = 'Fin de recorrido';
+    this.ui.finishTime.textContent = `Tiempo: ${fmtTime(total)}`;
+    this.ui.finishNotice.textContent =
+      'Objetivos no completados: saliste de los límites — llegaste al final de la carretera sin completar todas las paradas.';
+    this.ui.finishNotice.classList.remove('hidden');
+
+    this.ui.finishCloud.classList.add('hidden');
+    this.ui.finishCloud.textContent = '';
+
+    this.ui.finishOverlay.classList.remove('hidden');
+    playBump();
+    hapticBump();
+    this.syncHud();
+  }
+
   private failTimeAttack(): void {
     if (this.timeAttackFailed || this.sessionGameMode !== 'time_attack') return;
     this.timeAttackFailed = true;
@@ -1016,6 +1205,8 @@ export class MotoGame {
     this.exchangeUntilMs = null;
     this.ui.finishTitle.textContent = "Time's up!";
     this.ui.finishTime.textContent = `Límite ${fmtTime(TIME_ATTACK_LIMIT_MS)} · Tiempo: ${fmtTime(this.raceElapsedMs)}`;
+    this.ui.finishNotice.classList.add('hidden');
+    this.ui.finishNotice.textContent = '';
     this.ui.finishCloud.classList.add('hidden');
     this.ui.finishCloud.textContent = '';
     this.ui.finishOverlay.classList.remove('hidden');
@@ -1053,6 +1244,43 @@ export class MotoGame {
     }
   }
 
+  /** Partículas doradas al recoger moneda (reutiliza el mismo pool que chispas). */
+  private spawnCoinSparkBurst(pos: THREE.Vector3): void {
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      const r = 0.04 + Math.random() * 0.05;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffe566, transparent: true, opacity: 1 }),
+      );
+      mesh.position.copy(pos).add(new THREE.Vector3(0, 0.35, 0));
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 6.5,
+        3.2 + Math.random() * 3.4,
+        (Math.random() - 0.5) * 6.5,
+      );
+      this.scene.add(mesh);
+      this.sparks.push({ mesh, age: 0, vel });
+    }
+  }
+
+  /** Popup «+N Coins» junto al contador de monedas. */
+  private flashCoinPopup(amount: number): void {
+    const el = this.ui.coinCollectPopup;
+    el.textContent = amount === 1 ? '+1 Coin' : `+${amount} Coins`;
+    el.classList.remove('hidden', 'mtr-coin-popup--pop');
+    void el.offsetWidth;
+    el.classList.add('mtr-coin-popup--pop');
+    if (this.coinPopupHideTimeout !== null) {
+      clearTimeout(this.coinPopupHideTimeout);
+    }
+    this.coinPopupHideTimeout = window.setTimeout(() => {
+      el.classList.add('hidden');
+      el.classList.remove('mtr-coin-popup--pop');
+      this.coinPopupHideTimeout = null;
+    }, 920);
+  }
+
   private updateCheckpointVisuals(): void {
     for (let i = 0; i < this.checkpointMeshes.length; i++) {
       const group = this.checkpointMeshes[i]!;
@@ -1073,7 +1301,9 @@ export class MotoGame {
 
   private syncRoutePill(): void {
     const midRace =
-      this.phase === 'racing' || this.phase === 'boarding' || this.phase === 'exchange';
+      this.phase === 'racing' ||
+      this.phase === 'boarding' ||
+      this.phase === 'exchange';
     for (let i = 0; i < 3; i++) {
       const state: 'done' | 'current' | 'pending' =
         this.phase === 'done'
@@ -1132,6 +1362,9 @@ export class MotoGame {
 
   private syncHud(): void {
     const endHud = () => this.updateTimeAttackHudVisuals();
+    if (performance.now() >= this.walletHudLockUntilMs) {
+      this.ui.coinWalletValue.textContent = String(getCoinWallet());
+    }
     this.syncRoutePill();
 
     const maxSpeed = this.getEffectiveMaxSpeed();
@@ -1266,9 +1499,9 @@ export class MotoGame {
       ? raw
       : { throttle: 0, brake: 0, steer: 0 };
 
-    const accel = PHYS.accel;
-    const brake = PHYS.brake;
-    const drag = PHYS.drag;
+    const accel = this.rideTuning.accel;
+    const brake = this.rideTuning.brake;
+    const drag = this.rideTuning.drag;
 
     const nowTick = performance.now();
     if (this.turboBoostUntilMs !== null && nowTick >= this.turboBoostUntilMs) {
@@ -1313,6 +1546,10 @@ export class MotoGame {
           this.exchangeUntilMs = null;
           this.hidePassengerHud();
         } else if (this.exchangeMode === 'final_drop') {
+          this.hidePassengerHud();
+          this.exchangeMode = null;
+          this.exchangeUntilMs = null;
+          this.forceGrantUncollectedFinalCoins();
           this.completeFinalStop();
         }
       }
@@ -1354,8 +1591,12 @@ export class MotoGame {
           Math.min(1, steerTAlpha),
         );
 
-        const yawRate = THREE.MathUtils.lerp(HANDLING.yawRateLow, HANDLING.yawRateHigh, speedNorm);
-        const speedDamping = 1 - speedNorm * HANDLING.highSpeedSteerDamping;
+        const tun = this.rideTuning;
+        const yawRateLow = HANDLING.yawRateLow * tun.yawRateMult;
+        const yawRateHigh = HANDLING.yawRateHigh * tun.yawRateMult;
+        const yawRate = THREE.MathUtils.lerp(yawRateLow, yawRateHigh, speedNorm);
+        const dampAdj = Math.max(0.11, HANDLING.highSpeedSteerDamping - tun.steerDampingSubtract);
+        const speedDamping = 1 - speedNorm * dampAdj;
         this.bike.rotation.y -= this.currentSteer * yawRate * Math.max(0.45, speedDamping) * dt;
 
         // Asistencia arcade: al soltar dirección, recentra suavemente hacia la tangente de la ruta.
@@ -1391,7 +1632,7 @@ export class MotoGame {
         if (input.throttle > 0) {
           // Conserva el "feel" de arranque actual (launch speed), pero solo tras input del jugador.
           this.awaitingManualLaunch = false;
-          this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS);
+          this.speed = Math.max(this.speed, LAUNCH_SPEED_MPS + this.rideTuning.launchSpeedAdd);
         }
       }
 
@@ -1405,7 +1646,11 @@ export class MotoGame {
         this.speed *= Math.exp(-rollDrag * dt);
         if (steerMag > HANDLING.turnAssistStart) {
           const over = (steerMag - HANDLING.turnAssistStart) / (1 - HANDLING.turnAssistStart);
-          const turnDrag = HANDLING.turnDragBase * over * (0.35 + speedNorm * 0.65);
+          const turnDrag =
+            HANDLING.turnDragBase *
+            this.rideTuning.turnDragMult *
+            over *
+            (0.35 + speedNorm * 0.65);
           this.speed *= Math.exp(-turnDrag * dt);
         }
         this.speed = THREE.MathUtils.clamp(this.speed, -maxSpeed * 0.15, maxSpeed);
@@ -1435,7 +1680,11 @@ export class MotoGame {
         const steerMag = Math.abs(this.currentSteer);
         if (steerMag > 0.08 && speedNorm > 0.22) {
           // Deslizamiento lateral suave para "feel" arcade sin romper colisiones/recorrido.
-          const slipMps = -this.currentSteer * HANDLING.softSlipMps * speedNorm;
+          const slipMps =
+            -this.currentSteer *
+            HANDLING.softSlipMps *
+            this.rideTuning.softSlipMult *
+            speedNorm;
           this.bike.position.x += Math.cos(this.bike.rotation.y) * slipMps * dt;
           this.bike.position.z += Math.sin(this.bike.rotation.y) * slipMps * dt;
         }
@@ -1468,7 +1717,7 @@ export class MotoGame {
         const lat = getLateralDistanceToRoadMeters(x, z);
         const off = getOffroadSeverity(lat);
         if (off > 0) {
-          this.speed *= Math.exp(-PHYS.offRoadExtraDrag * off * dt);
+          this.speed *= Math.exp(-this.rideTuning.offRoadExtraDrag * off * dt);
         }
         
         // Building collision check - prevent going through buildings
@@ -1483,26 +1732,35 @@ export class MotoGame {
           z = WORLD_CITY_END_Z;
           this.speed *= 0.42;
           this.bike.position.z = z;
+          if (
+            this.sessionStarted &&
+            this.phase === 'racing' &&
+            this.nextCheckpointIndex < CHECKPOINTS.length
+          ) {
+            this.finishRaceWorldBoundaryIncomplete();
+          }
         }
 
-        const pickR = TURBO.pickupRadius + PLAYER_RADIUS * 0.88;
-        const pickR2 = pickR * pickR;
-        for (const tp of this.turboPickups) {
-          if (!tp.active) {
-            continue;
-          }
-          if (this.nextCheckpointIndex < tp.minNextCheckpointIndex) {
-            continue;
-          }
-          const dx = x - tp.x;
-          const dz = z - tp.z;
-          if (dx * dx + dz * dz <= pickR2) {
-            tp.active = false;
-            tp.group.visible = false;
-            this.turboBoostUntilMs = nowTick + TURBO.durationMs;
-            this.speed = Math.min(this.getEffectiveMaxSpeed(), this.speed + 2.8);
-            playCheckpointChime();
-            hapticCheckpoint();
+        if (this.phase === 'racing') {
+          const pickR = TURBO.pickupRadius + PLAYER_RADIUS * 0.88;
+          const pickR2 = pickR * pickR;
+          for (const tp of this.turboPickups) {
+            if (!tp.active) {
+              continue;
+            }
+            if (this.nextCheckpointIndex < tp.minNextCheckpointIndex) {
+              continue;
+            }
+            const dx = x - tp.x;
+            const dz = z - tp.z;
+            if (dx * dx + dz * dz <= pickR2) {
+              tp.active = false;
+              tp.group.visible = false;
+              this.turboBoostUntilMs = nowTick + TURBO.durationMs;
+              this.speed = Math.min(this.getEffectiveMaxSpeed(), this.speed + 2.8);
+              playCheckpointChime();
+              hapticCheckpoint();
+            }
           }
         }
       } else {
@@ -1532,13 +1790,13 @@ export class MotoGame {
         const la = 1 - Math.exp(-SMOOTH_LEAN_HZ * dt);
         this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, targetZ, Math.min(1, la));
       } else {
-        const l0 = 1 - Math.exp(-SMOOTH_LEAN_RESET_HZ * dt);
+        const l0 = 1 - Math.exp(-SMOOTH_LEAN_RESET_HZ * this.rideTuning.leanResetMult * dt);
         this.bike.rotation.z = THREE.MathUtils.lerp(this.bike.rotation.z, 0, Math.min(1, l0));
       }
       this.driftTrail.update(dt, isDrift ? driftI : 0, minDr, this.bike);
       this.bikeDriftLastYaw = yawNow;
 
-      if (canDrive && this.nextCheckpointIndex < CHECKPOINTS.length) {
+      if (this.phase === 'racing' && this.nextCheckpointIndex < CHECKPOINTS.length) {
         const cp = CHECKPOINTS[this.nextCheckpointIndex]!;
         const dx = x - cp.center.x;
         const dz = z - cp.center.z;
@@ -1584,6 +1842,34 @@ export class MotoGame {
       }
     }
 
+    // Monedas: animación + recogida durante la carrera.
+    if (this.sessionStarted && this.phase === 'racing') {
+      const px = this.bike.position.x;
+      const pz = this.bike.position.z;
+      let picked = 0;
+      for (const c of this.coins) {
+        c.update(dt, tSec);
+        if (c.collected) continue;
+        if (c.tryCollect({ x: px, z: pz }, PLAYER_RADIUS).collected) {
+          picked += 1;
+          this.spawnCoinSparkBurst(c.mesh.position);
+        }
+      }
+      if (picked > 0) {
+        const before = getCoinWallet();
+        addCoinsToWallet(picked);
+        const after = getCoinWallet();
+        this.walletHudLockUntilMs = performance.now() + 420;
+        animateWalletNumber(this.ui.coinWalletValue, before, after, 400);
+        playCoinCollect();
+        this.flashCoinPopup(picked);
+      }
+    } else {
+      for (const c of this.coins) {
+        c.update(dt, tSec);
+      }
+    }
+
     this.syncHud();
 
     if (this.sessionStarted) {
@@ -1620,6 +1906,29 @@ export class MotoGame {
     for (const ghost of this.otherPlayers.values()) {
       ghost.update(dt);
     }
+
+    const turboOn =
+      this.turboBoostUntilMs !== null && performance.now() < this.turboBoostUntilMs;
+    if (this.turboGlowMesh) {
+      const mat = this.turboGlowMesh.material as THREE.MeshBasicMaterial;
+      if (turboOn) {
+        const tier = this.rideTuning.turboVfxTier;
+        const pulse = 0.55 + 0.22 * Math.sin(tSec * 14) + tier * 0.06;
+        mat.opacity = Math.min(0.52, pulse * 0.42);
+        const s = 1 + tier * 0.05 + 0.06 * Math.sin(tSec * 10);
+        this.turboGlowMesh.scale.setScalar(s);
+      } else {
+        mat.opacity *= Math.exp(-10 * dt);
+        if (mat.opacity < 0.006) mat.opacity = 0;
+        this.turboGlowMesh.scale.setScalar(1);
+      }
+    }
+    this.exhaustSmoke?.update(dt, this.bike, {
+      speed: this.speed,
+      throttle: input.throttle,
+      tier: this.rideTuning.exhaustTier,
+      turboActive: turboOn,
+    });
 
     this.nightSky?.update(this.camera);
     tickCityShaders(tSec);

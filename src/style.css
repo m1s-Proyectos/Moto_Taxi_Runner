@@ -529,3 +529,28 @@ html[data-mtr-ui='desktop'][data-mtr-aspect='wide'] .mtr-touch-pad .mtr-touch-ti
 ::selection {
   background: rgb(245 158 11 / 0.3);
 }
+
+/* Popup al recoger monedas (HUD izquierdo) */
+.mtr-coin-popup.mtr-coin-popup--pop {
+  display: block;
+  animation: mtrCoinPop 0.88s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes mtrCoinPop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.88);
+  }
+  12% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.06);
+  }
+  72% {
+    opacity: 1;
+    transform: translate3d(0, -10px, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -18px, 0) scale(0.98);
+  }
+}

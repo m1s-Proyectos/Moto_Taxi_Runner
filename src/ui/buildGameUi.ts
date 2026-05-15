@@ -63,6 +63,8 @@ export type GameUiRefs = {
   finishTime: HTMLElement;
   /** Estado de envío a Supabase tras completar carrera. */
   finishCloud: HTMLElement;
+  /** Mensaje extra (p. ej. límite ciudad sin objetivos). */
+  finishNotice: HTMLElement;
   /** Contenedor de cuenta atrás (solo Time Attack). */
   timeAttackHud: HTMLElement;
   timeAttackBarFill: HTMLElement;
@@ -80,6 +82,10 @@ export type GameUiRefs = {
    */
   pcControlsHint: HTMLElement;
   pcControlsHintText: HTMLElement;
+  /** Saldo persistente (localStorage), actualizado en vivo. */
+  coinWalletValue: HTMLElement;
+  /** Popup corto «+N Coins» al recoger. */
+  coinCollectPopup: HTMLElement;
 };
 
 function iconForStop(index: 0 | 1 | 2, state: 'done' | 'current' | 'pending'): string {
@@ -438,6 +444,36 @@ export function buildGameUi(
   pcControlsHint.append(pcControlsHintText);
   hudRoot.append(pcControlsHint, passengerHud);
 
+  const globalWalletBar = document.createElement('div');
+  globalWalletBar.className =
+    'mtr-global-wallet-bar pointer-events-none fixed left-1/2 top-[max(0.35rem,env(safe-area-inset-top))] z-[60] flex -translate-x-1/2 sm:left-auto sm:right-[max(0.45rem,env(safe-area-inset-right))] sm:translate-x-0';
+  const walletInner = document.createElement('div');
+  walletInner.className =
+    'relative flex flex-col items-end gap-0.5 rounded-2xl border border-amber-400/40 bg-zinc-950/90 px-3 py-1.5 shadow-[0_0_22px_rgba(251,191,36,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md sm:px-3.5 sm:py-2';
+  const walletLbl = document.createElement('span');
+  walletLbl.className = 'text-[9px] font-bold uppercase tracking-[0.22em] text-amber-400/90';
+  walletLbl.textContent = 'Monedas';
+  const walletRow = document.createElement('div');
+  walletRow.className = 'flex items-center gap-2';
+  const coinIconGw = document.createElement('span');
+  coinIconGw.className = 'text-[1.15rem] leading-none drop-shadow-[0_0_8px_rgba(251,191,36,0.45)]';
+  coinIconGw.setAttribute('aria-hidden', 'true');
+  coinIconGw.textContent = '🪙';
+  const coinWalletValue = document.createElement('span');
+  coinWalletValue.dataset.role = 'coin-wallet';
+  coinWalletValue.className =
+    'min-w-[3ch] text-lg font-black tabular-nums tracking-tight text-amber-100 drop-shadow-[0_0_12px_rgba(251,191,36,0.35)] sm:text-xl';
+  coinWalletValue.textContent = '0';
+  const coinCollectPopup = document.createElement('div');
+  coinCollectPopup.dataset.role = 'coin-popup';
+  coinCollectPopup.className =
+    'mtr-coin-popup pointer-events-none absolute right-0 top-full z-20 mt-1 hidden text-sm font-extrabold tracking-wide text-amber-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.65)]';
+  coinCollectPopup.setAttribute('aria-live', 'polite');
+  walletRow.append(coinIconGw, coinWalletValue);
+  walletInner.append(walletLbl, walletRow, coinCollectPopup);
+  globalWalletBar.append(walletInner);
+  container.appendChild(globalWalletBar);
+
   container.appendChild(hudRoot);
 
   const menuOverlay = document.createElement('div');
@@ -554,6 +590,7 @@ export function buildGameUi(
     <div class="my-auto w-full max-w-[420px] max-h-[min(100dvh,100svh)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-zinc-800/80 bg-zinc-900/95 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl [scrollbar-gutter:stable]" role="dialog" aria-modal="true" aria-label="Resultado">
       <h2 data-role="finish-title" class="text-xl font-semibold tracking-tight text-zinc-50">¡Llegaste!</h2>
       <p data-role="finish-time" class="mt-3 font-mono text-lg text-amber-400/95">Tiempo: 0:00.00</p>
+      <p data-role="finish-notice" class="mt-3 hidden rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-sm font-medium leading-snug text-amber-100/95" role="status"></p>
       <p data-role="finish-cloud" class="mt-2 hidden min-h-[1.25rem] text-xs text-zinc-500" aria-live="polite"></p>
       <p class="mt-2 text-sm leading-relaxed text-zinc-400">Desempate (si aplica): menor tiempo en el último tramo (casa de mamá), luego el anterior.</p>
       <div class="mt-6 flex flex-col gap-4">
@@ -595,6 +632,7 @@ export function buildGameUi(
   const btnJoinRoom = q(menuOverlay, '[data-role="join-room"]') as HTMLButtonElement;
   const finishTitle = q(finishOverlay, '[data-role="finish-title"]');
   const finishTime = q(finishOverlay, '[data-role="finish-time"]');
+  const finishNotice = q(finishOverlay, '[data-role="finish-notice"]');
   const finishCloud = q(finishOverlay, '[data-role="finish-cloud"]');
   const btnAgain = q(finishOverlay, '[data-role="again"]') as HTMLButtonElement;
   const btnFinishClose = q(finishOverlay, '[data-role="finish-close"]') as HTMLButtonElement;
@@ -940,6 +978,7 @@ export function buildGameUi(
     finishOverlay,
     finishTitle,
     finishTime,
+    finishNotice,
     finishCloud,
     timeAttackHud,
     timeAttackBarFill,
@@ -952,5 +991,7 @@ export function buildGameUi(
     passengerArrow,
     pcControlsHint,
     pcControlsHintText,
+    coinWalletValue,
+    coinCollectPopup,
   };
 }
